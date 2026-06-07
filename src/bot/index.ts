@@ -40,6 +40,7 @@ export function createBot(): Bot {
       `/today — Гороскоп на сегодня\n` +
       `/subscribe — Оформить Premium подписку\n` +
       `/settings — Изменить данные рождения\n` +
+      `/privacy — Политика конфиденциальности\n` +
       `/help — Это сообщение\n\n` +
       `💡 Для получения персонального гороскопа укажите дату рождения в /settings`,
       { parse_mode: 'Markdown' }
@@ -59,6 +60,18 @@ export function createBot(): Bot {
     } catch (e) {
       logger.error('web_app_data parse error', { e });
     }
+  });
+
+  // Privacy policy command
+  bot.command('privacy', async (ctx) => {
+    const webhookUrl = process.env.WEBHOOK_URL || 'https://astroguru-production.up.railway.app';
+    await ctx.reply(
+      `📄 *Политика конфиденциальности AstroGuru*\n\n` +
+      `Ознакомьтесь с полным текстом политики в отношении обработки персональных данных:\n\n` +
+      `🔗 ${webhookUrl}/privacy\n\n` +
+      `По вопросам обработки персональных данных: natesally@yandex.com`,
+      { parse_mode: 'Markdown' }
+    );
   });
 
   // Unknown command fallback

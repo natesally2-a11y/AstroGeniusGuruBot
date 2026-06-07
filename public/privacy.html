@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Политика конфиденциальности — AstroGuru</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --tg-bg: var(--tg-theme-bg-color, #1a1a2e);
+      --tg-sec-bg: var(--tg-theme-secondary-bg-color, #16213e);
+      --tg-text: var(--tg-theme-text-color, #ffffff);
+      --tg-hint: var(--tg-theme-hint-color, #aaaaaa);
+      --tg-link: var(--tg-theme-link-color, #a78bfa);
+      --accent: #a78bfa;
+      --border: rgba(255, 255, 255, 0.1);
+      --surface: rgba(255, 255, 255, 0.05);
+      --radius: 14px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      height: 100%;
+      background: var(--tg-bg);
+      color: var(--tg-text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--tg-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .back-btn {
+      background: var(--surface);
+      border: none;
+      color: var(--tg-text);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .content {
+      padding: 20px 16px 40px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .doc-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--accent);
+    }
+
+    .doc-date {
+      font-size: 12px;
+      color: var(--tg-hint);
+      margin-bottom: 28px;
+    }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::before {
+      content: '';
+      display: inline-block;
+      width: 3px;
+      height: 16px;
+      background: var(--accent);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    p {
+      margin-bottom: 10px;
+      color: var(--tg-text);
+      opacity: 0.9;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    .clause {
+      margin-bottom: 8px;
+      padding-left: 8px;
+      border-left: 2px solid var(--border);
+    }
+
+    .clause-num {
+      font-weight: 600;
+      color: var(--accent);
+      margin-right: 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    th {
+      background: rgba(167, 139, 250, 0.15);
+      color: var(--accent);
+      font-weight: 600;
+      padding: 8px 10px;
+      text-align: left;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 8px 10px;
+      vertical-align: top;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+      opacity: 0.9;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    a {
+      color: var(--tg-link, #a78bfa);
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    .highlight {
+      background: rgba(167, 139, 250, 0.1);
+      border: 1px solid rgba(167, 139, 250, 0.3);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    .highlight strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <button class="back-btn" onclick="goBack()">←</button>
+    <span class="header-title">Политика конфиденциальности</span>
+  </div>
+
+  <div class="content">
+    <div class="doc-title">Политика в отношении обработки персональных данных</div>
+    <div class="doc-date">Актуальная версия · <a href="https://t.me/AstroGeniusGuruBot">AstroGuru</a></div>
+
+    <!-- 1 -->
+    <div class="section">
+      <div class="section-title">1. Общие положения</div>
+      <p>Настоящая политика обработки персональных данных составлена в соответствии с требованиями Федерального закона от 27.07.2006 № 152-ФЗ «О персональных данных» и определяет порядок обработки персональных данных и меры по обеспечению их безопасности, предпринимаемые <strong>Аль Даш Д.Х.</strong> (далее — Оператор).</p>
+      <div class="clause"><span class="clause-num">1.1.</span> Оператор ставит своей важнейшей целью соблюдение прав и свобод человека при обработке персональных данных, в том числе защиту права на неприкосновенность частной жизни, личную и семейную тайну.</div>
+      <div class="clause"><span class="clause-num">1.2.</span> Настоящая Политика применяется ко всей информации, которую Оператор может получить о посетителях <a href="https://t.me/AstroGeniusGuruBot">https://t.me/AstroGeniusGuruBot</a>.</div>
+    </div>
+
+    <!-- 2 -->
+    <div class="section">
+      <div class="section-title">2. Основные понятия</div>
+      <div class="clause"><span class="clause-num">2.1.</span> <strong>Автоматизированная обработка</strong> — обработка персональных данных с помощью средств вычислительной техники.</div>
+      <div class="clause"><span class="clause-num">2.2.</span> <strong>Блокирование</strong> — временное прекращение обработки персональных данных.</div>
+      <div class="clause"><span class="clause-num">2.3.</span> <strong>Веб-сайт</strong> — совокупность материалов и программ, доступных по адресу <a href="https://t.me/AstroGeniusGuruBot">https://t.me/AstroGeniusGuruBot</a>.</div>
+      <div class="clause"><span class="clause-num">2.4.</span> <strong>Информационная система ПД</strong> — совокупность баз данных и обеспечивающих их обработку технологий.</div>
+      <div class="clause"><span class="clause-num">2.5.</span> <strong>Обезличивание</strong> — действия, в результате которых невозможно определить принадлежность данных конкретному лицу без дополнительной информации.</div>
+      <div class="clause"><span class="clause-num">2.6.</span> <strong>Обработка</strong> — любое действие с персональными данными: сбор, запись, хранение, использование, передача, уничтожение и др.</div>
+      <div class="clause"><span class="clause-num">2.7.</span> <strong>Оператор</strong> — лицо, организующее и осуществляющее обработку персональных данных.</div>
+      <div class="clause"><span class="clause-num">2.8.</span> <strong>Персональные данные</strong> — любая информация, относящаяся к определённому Пользователю сайта.</div>
+      <div class="clause"><span class="clause-num">2.9.</span> <strong>Пользователь</strong> — любой посетитель <a href="https://t.me/AstroGeniusGuruBot">https://t.me/AstroGeniusGuruBot</a>.</div>
+      <div class="clause"><span class="clause-num">2.10.</span> <strong>Трансграничная передача</strong> — передача персональных данных на территорию иностранного государства.</div>
+      <div class="clause"><span class="clause-num">2.11.</span> <strong>Уничтожение</strong> — безвозвратное удаление персональных данных из информационной системы.</div>
+    </div>
+
+    <!-- 3 -->
+    <div class="section">
+      <div class="section-title">3. Права и обязанности Оператора</div>
+      <p><strong>Оператор имеет право:</strong></p>
+      <div class="clause">— получать от субъекта достоверную информацию и документы, содержащие персональные данные;</div>
+      <div class="clause">— при отзыве согласия продолжить обработку при наличии оснований, предусмотренных законом;</div>
+      <div class="clause">— самостоятельно определять состав мер по обеспечению требований законодательства.</div>
+      <p style="margin-top:12px"><strong>Оператор обязан:</strong></p>
+      <div class="clause">— предоставлять субъекту информацию об обработке его данных по запросу;</div>
+      <div class="clause">— организовывать обработку в порядке, установленном законодательством РФ;</div>
+      <div class="clause">— принимать правовые, организационные и технические меры защиты данных;</div>
+      <div class="clause">— публиковать настоящую Политику в открытом доступе;</div>
+      <div class="clause">— прекращать обработку и уничтожать данные в предусмотренных законом случаях.</div>
+    </div>
+
+    <!-- 4 -->
+    <div class="section">
+      <div class="section-title">4. Права и обязанности субъектов ПД</div>
+      <p><strong>Субъекты персональных данных имеют право:</strong></p>
+      <div class="clause">— получать информацию об обработке своих персональных данных;</div>
+      <div class="clause">— требовать уточнения, блокирования или уничтожения неточных либо незаконно полученных данных;</div>
+      <div class="clause">— отозвать согласие на обработку персональных данных в любой момент;</div>
+      <div class="clause">— обжаловать неправомерные действия Оператора в уполномоченном органе или суде.</div>
+      <p style="margin-top:12px"><strong>Субъекты персональных данных обязаны:</strong></p>
+      <div class="clause">— предоставлять Оператору достоверные данные о себе;</div>
+      <div class="clause">— сообщать об изменении своих персональных данных.</div>
+      <div class="clause"><span class="clause-num">4.3.</span> Лица, передавшие недостоверные сведения, несут ответственность в соответствии с законодательством РФ.</div>
+    </div>
+
+    <!-- 5 -->
+    <div class="section">
+      <div class="section-title">5. Принципы обработки персональных данных</div>
+      <div class="clause"><span class="clause-num">5.1.</span> Обработка осуществляется на законной и справедливой основе.</div>
+      <div class="clause"><span class="clause-num">5.2.</span> Обработка ограничивается достижением конкретных, заранее определённых и законных целей.</div>
+      <div class="clause"><span class="clause-num">5.3.</span> Не допускается объединение баз данных, цели обработки которых несовместимы.</div>
+      <div class="clause"><span class="clause-num">5.4.</span> Обработке подлежат только данные, отвечающие целям их обработки.</div>
+      <div class="clause"><span class="clause-num">5.5.</span> Не допускается избыточность обрабатываемых данных по отношению к заявленным целям.</div>
+      <div class="clause"><span class="clause-num">5.6.</span> Обеспечивается точность, достаточность и актуальность данных.</div>
+      <div class="clause"><span class="clause-num">5.7.</span> Хранение осуществляется не дольше, чем требуют цели обработки. По достижении целей данные уничтожаются или обезличиваются.</div>
+    </div>
+
+    <!-- 6 -->
+    <div class="section">
+      <div class="section-title">6. Цели обработки персональных данных</div>
+      <table>
+        <tr>
+          <th>Параметр</th>
+          <th>Описание</th>
+        </tr>
+        <tr>
+          <td><strong>Цель</strong></td>
+          <td>Предоставление услуг астрологического бота</td>
+        </tr>
+        <tr>
+          <td><strong>Персональные данные</strong></td>
+          <td>Имя и фамилия (из Telegram), дата и место рождения, время рождения (при указании пользователем), Telegram ID</td>
+        </tr>
+        <tr>
+          <td><strong>Правовые основания</strong></td>
+          <td>Договоры, заключаемые между Оператором и субъектом персональных данных; согласие субъекта</td>
+        </tr>
+        <tr>
+          <td><strong>Виды обработки</strong></td>
+          <td>Сбор, запись, систематизация, накопление, хранение, уничтожение и обезличивание</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 7 -->
+    <div class="section">
+      <div class="section-title">7. Условия обработки персональных данных</div>
+      <div class="clause"><span class="clause-num">7.1.</span> Обработка осуществляется с согласия субъекта на обработку его персональных данных.</div>
+      <div class="clause"><span class="clause-num">7.2.</span> Обработка необходима для достижения целей, предусмотренных законодательством РФ.</div>
+      <div class="clause"><span class="clause-num">7.3.</span> Обработка необходима для исполнения договора, стороной которого является субъект персональных данных.</div>
+      <div class="clause"><span class="clause-num">7.4.</span> Обработка необходима для осуществления законных интересов Оператора при условии соблюдения прав субъекта.</div>
+    </div>
+
+    <!-- 8 -->
+    <div class="section">
+      <div class="section-title">8. Порядок сбора, хранения и передачи ПД</div>
+      <div class="clause"><span class="clause-num">8.1.</span> Оператор обеспечивает сохранность данных и исключает доступ к ним неуполномоченных лиц.</div>
+      <div class="clause"><span class="clause-num">8.2.</span> Персональные данные не передаются третьим лицам, за исключением случаев, предусмотренных действующим законодательством.</div>
+      <div class="clause"><span class="clause-num">8.3.</span> При выявлении неточностей Пользователь может направить уведомление на <a href="mailto:natesally@yandex.com">natesally@yandex.com</a> с пометкой «Актуализация персональных данных».</div>
+      <div class="clause"><span class="clause-num">8.4.</span> Срок обработки определяется достижением целей, для которых были собраны данные.</div>
+      <div class="highlight">Пользователь вправе <strong>в любой момент отозвать согласие</strong> на обработку персональных данных, направив письмо на <a href="mailto:natesally@yandex.com">natesally@yandex.com</a> с пометкой «Отзыв согласия на обработку персональных данных».</div>
+      <div class="clause" style="margin-top:12px"><span class="clause-num">8.5.</span> Информация, собираемая сторонними сервисами (платёжные системы, Telegram), хранится и обрабатывается этими лицами согласно их собственным политикам. Оператор не несёт ответственности за действия третьих лиц.</div>
+      <div class="clause"><span class="clause-num">8.6.</span> Запреты субъекта на передачу персональных данных не действуют в случаях обработки в государственных или общественных интересах, определённых законодательством РФ.</div>
+      <div class="clause"><span class="clause-num">8.7.</span> Оператор обеспечивает конфиденциальность персональных данных.</div>
+      <div class="clause"><span class="clause-num">8.8.</span> Хранение осуществляется не дольше, чем требуют цели обработки.</div>
+      <div class="clause"><span class="clause-num">8.9.</span> Обработка прекращается при достижении её целей, истечении срока согласия, отзыве согласия субъектом или при выявлении неправомерной обработки.</div>
+    </div>
+
+    <!-- 9 -->
+    <div class="section">
+      <div class="section-title">9. Перечень действий с персональными данными</div>
+      <div class="clause"><span class="clause-num">9.1.</span> Оператор осуществляет сбор, запись, систематизацию, накопление, хранение, уточнение, извлечение, использование, передачу, обезличивание, блокирование, удаление и уничтожение персональных данных.</div>
+      <div class="clause"><span class="clause-num">9.2.</span> Оператор осуществляет автоматизированную обработку персональных данных с передачей информации по информационно-телекоммуникационным сетям.</div>
+    </div>
+
+    <!-- 10 -->
+    <div class="section">
+      <div class="section-title">10. Трансграничная передача персональных данных</div>
+      <div class="clause"><span class="clause-num">10.1.</span> До начала трансграничной передачи Оператор уведомляет уполномоченный орган по защите прав субъектов персональных данных.</div>
+      <div class="clause"><span class="clause-num">10.2.</span> Оператор получает необходимые сведения от иностранных лиц, которым планируется трансграничная передача данных.</div>
+    </div>
+
+    <!-- 11 -->
+    <div class="section">
+      <div class="section-title">11. Конфиденциальность персональных данных</div>
+      <p>Оператор и иные лица, получившие доступ к персональным данным, обязаны не раскрывать их третьим лицам и не распространять без согласия субъекта, если иное не предусмотрено федеральным законом.</p>
+    </div>
+
+    <!-- 12 -->
+    <div class="section">
+      <div class="section-title">12. Заключительные положения</div>
+      <div class="clause"><span class="clause-num">12.1.</span> Пользователь может получить разъяснения по вопросам обработки персональных данных, обратившись по адресу <a href="mailto:natesally@yandex.com">natesally@yandex.com</a>.</div>
+      <div class="clause"><span class="clause-num">12.2.</span> В данном документе будут отражены любые изменения политики Оператора. Политика действует бессрочно до замены новой версией.</div>
+      <div class="clause"><span class="clause-num">12.3.</span> Актуальная версия Политики расположена по адресу: <a href="https://astroguru-production.up.railway.app/privacy">https://astroguru-production.up.railway.app/privacy</a>.</div>
+    </div>
+
+  </div>
+
+  <script>
+    if (window.Telegram && window.Telegram.WebApp) {
+      Telegram.WebApp.ready();
+      Telegram.WebApp.BackButton.show();
+      Telegram.WebApp.BackButton.onClick(function() {
+        window.history.back();
+      });
+    }
+
+    function goBack() {
+      if (window.history.length > 1) {
+        window.history.back();
+      } else if (window.Telegram && window.Telegram.WebApp) {
+        Telegram.WebApp.close();
+      }
+    }
+  </script>
+</body>
+</html>

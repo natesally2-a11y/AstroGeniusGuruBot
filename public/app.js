@@ -500,6 +500,15 @@ class AstroGuruApp {
       tg.sendData(JSON.stringify({ action: 'command', command }));
     }
   }
+
+  openPrivacy() {
+    const privacyUrl = window.location.origin + '/privacy';
+    if (tg) {
+      tg.openLink(privacyUrl);
+    } else {
+      window.open(privacyUrl, '_blank');
+    }
+  }
 }
 
 // Start the app

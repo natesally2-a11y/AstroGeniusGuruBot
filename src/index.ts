@@ -57,6 +57,11 @@ async function main(): Promise<void> {
     res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
   });
 
+  // Privacy policy route
+  app.get('/privacy', (_req, res) => {
+    res.sendFile(path.join(process.cwd(), 'public', 'privacy.html'));
+  });
+
   // Start Express server
   const server = app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`);
