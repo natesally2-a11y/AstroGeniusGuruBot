@@ -1,11 +1,11 @@
 import { Bot, webhookCallback } from 'grammy';
+import { logger } from '../utils/logger';
 import { userMiddleware } from './middleware/userMiddleware';
 import { registerStartHandler } from './handlers/start';
 import { registerTodayHandler } from './handlers/today';
 import { registerSubscribeHandler } from './handlers/subscribe';
 import { registerSettingsHandler } from './handlers/settings';
 import { registerPaymentHandlers } from './handlers/payment';
-import { logger } from '../utils/logger';
 
 export function createBot(): Bot {
   const token = process.env.BOT_TOKEN;
@@ -44,6 +44,21 @@ export function createBot(): Bot {
       `💡 Для получения персонального гороскопа укажите дату рождения в /settings`,
       { parse_mode: 'Markdown' }
     );
+  });
+
+  // Mini App data handler
+  bot.on('message:web_app_data', async (ctx) => {
+    try {
+      const data = JSON.parse(ctx.message.web_app_data!.data);
+      if (data.action === 'subscribe') {
+        const { sendSubscriptionInvoice } = await import('../payments/stars');
+        const { getUserByTelegramId } = await import('../database/queries');
+        const user = getUserByTelegramId(ctx.from!.id);
+        if (user) await sendSubscriptionInvoice(bot, ctx.chat!.id, user.id);
+      }
+    } catch (e) {
+      logger.error('web_app_data parse error', { e });
+    }
   });
 
   // Unknown command fallback

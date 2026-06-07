@@ -27,6 +27,9 @@ class AstroGuruApp {
     this.userData = null;
     this.currentTab = 'horoscope';
     this.initData = tg?.initData || '';
+    // Dev mode: parse ?dev_id= from URL for local testing
+    const urlParams = new URLSearchParams(window.location.search);
+    this.devId = urlParams.get('dev_id') || '';
     this.init();
   }
 
@@ -104,7 +107,13 @@ class AstroGuruApp {
     const headers = { 'Content-Type': 'application/json' };
     if (this.initData) headers['x-init-data'] = this.initData;
 
-    const response = await fetch(`${API_BASE}${endpoint}`, { headers });
+    // Dev mode: pass dev_id if running outside Telegram
+    const sep = endpoint.includes('?') ? '&' : '?';
+    const url = (!this.initData && this.devId)
+      ? `${API_BASE}${endpoint}${sep}dev_id=${this.devId}`
+      : `${API_BASE}${endpoint}`;
+
+    const response = await fetch(url, { headers });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${response.status}`);
@@ -481,9 +490,9 @@ class AstroGuruApp {
 
   openSubscribe() {
     if (tg) {
-      tg.close();
+      // Send data to bot to trigger /subscribe flow
+      tg.sendData(JSON.stringify({ action: 'subscribe' }));
     }
-    // The bot will handle the subscription via /subscribe command
   }
 
   sendBotCommand(command) {

@@ -49,10 +49,10 @@ export function validateInitData(initDataRaw: string, botToken: string): InitDat
 
     if (computedHash !== hash) return null;
 
-    // Check auth_date is not too old (5 minutes)
+    // Check auth_date is not too old (24 hours)
     const authDate = parseInt(params.get('auth_date') || '0', 10);
     const now = Math.floor(Date.now() / 1000);
-    if (now - authDate > 300) return null;
+    if (now - authDate > 86400) return null;
 
     const result: InitData = {
       auth_date: authDate,

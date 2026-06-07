@@ -12,11 +12,19 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
+const IS_DEV = process.env.NODE_ENV !== 'production';
 
 // ─── Middleware: validate Telegram initData ───────────────────────────────────
 
 function requireAuth(req: Request, res: Response, next: () => void): void {
   const initData = req.headers['x-init-data'] as string || req.query.initData as string;
+
+  // Dev mode: allow requests with ?dev_id=<telegram_id> for testing
+  if (IS_DEV && req.query.dev_id) {
+    (req as any).telegramUser = { id: parseInt(req.query.dev_id as string, 10), first_name: 'Dev' };
+    next();
+    return;
+  }
 
   if (!initData) {
     res.status(401).json({ error: 'Missing initData' });
