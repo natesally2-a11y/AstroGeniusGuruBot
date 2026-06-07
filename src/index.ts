@@ -35,16 +35,16 @@ async function main(): Promise<void> {
     credentials: true,
   }));
 
-  // Webhook handler (must be before json middleware)
+  // Body parsing (must come first so req.body is available for webhook handler)
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true }));
+
+  // Webhook handler
   if (WEBHOOK_URL) {
     const webhookPath = `/webhook/${WEBHOOK_SECRET}`;
     app.use(webhookPath, getWebhookCallback(bot));
     logger.info(`Webhook registered at ${webhookPath}`);
   }
-
-  // Body parsing
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true }));
 
   // Static files for Mini App
   app.use(express.static(path.join(process.cwd(), 'public')));
