@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AstroGuru</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="screen active">
+      <div class="loading-content">
+        <div class="star-burst">✨</div>
+        <h1 class="logo-text">AstroGuru</h1>
+        <p class="loading-subtitle">Познайте свою судьбу по звёздам</p>
+        <div class="loading-spinner"></div>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" class="screen">
+      <!-- Bottom Navigation -->
+      <nav class="bottom-nav">
+        <button class="nav-btn active" data-tab="horoscope">
+          <span class="nav-icon">🔮</span>
+          <span>Гороскоп</span>
+        </button>
+        <button class="nav-btn" data-tab="chart">
+          <span class="nav-icon">⭕</span>
+          <span>Карта</span>
+        </button>
+        <button class="nav-btn" data-tab="compat">
+          <span class="nav-icon">💑</span>
+          <span>Совместим.</span>
+        </button>
+        <button class="nav-btn" data-tab="profile">
+          <span class="nav-icon">👤</span>
+          <span>Профиль</span>
+        </button>
+      </nav>
+
+      <!-- Tab: Horoscope -->
+      <div id="tab-horoscope" class="tab-content active">
+        <div class="page-header">
+          <div class="header-gradient"></div>
+          <div class="header-content">
+            <div id="user-sign-display" class="user-sign">
+              <span class="sign-emoji">✨</span>
+              <div class="sign-info">
+                <span class="sign-name" id="header-sign-name">Загрузка...</span>
+                <span class="sign-detail" id="header-sign-detail"></span>
+              </div>
+            </div>
+            <div class="premium-badge" id="premium-badge" style="display:none">
+              <span>⭐ PREMIUM</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-area">
+          <div class="horoscope-tabs">
+            <button class="htab active" data-htype="daily">Сегодня</button>
+            <button class="htab" data-htype="weekly">Неделя</button>
+          </div>
+
+          <div id="horoscope-content" class="horoscope-card">
+            <div class="skeleton-loading">
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line short"></div>
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line short"></div>
+            </div>
+          </div>
+
+          <div id="upgrade-banner" class="upgrade-banner" style="display:none">
+            <div class="upgrade-icon">⭐</div>
+            <div class="upgrade-text">
+              <strong>Получите Premium</strong>
+              <span>Персональный гороскоп на основе натальной карты</span>
+            </div>
+            <button class="upgrade-btn" onclick="app.openSubscribe()">49 ⭐</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Natal Chart -->
+      <div id="tab-chart" class="tab-content">
+        <div class="page-header compact">
+          <h2 class="page-title">Натальная карта</h2>
+        </div>
+        <div class="content-area">
+          <div id="chart-locked" class="locked-feature" style="display:none">
+            <div class="lock-icon">🔒</div>
+            <h3>Доступно в Premium</h3>
+            <p>Натальная карта рассчитывается по точным данным рождения и показывает положение всех планет в момент вашего появления на свет.</p>
+            <button class="btn-primary" onclick="app.openSubscribe()">⭐ Получить Premium за 49 Stars</button>
+          </div>
+
+          <div id="chart-container" style="display:none">
+            <div class="natal-chart-wrapper">
+              <canvas id="natal-chart-canvas" width="320" height="320"></canvas>
+            </div>
+            <div id="planets-list" class="planets-grid"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Compatibility -->
+      <div id="tab-compat" class="tab-content">
+        <div class="page-header compact">
+          <h2 class="page-title">Совместимость</h2>
+        </div>
+        <div class="content-area">
+          <div class="compat-selector">
+            <div class="sign-picker">
+              <label>Ваш знак</label>
+              <select id="sign1-select" class="sign-select">
+                <option value="">Выберите знак</option>
+              </select>
+            </div>
+            <div class="compat-heart">💕</div>
+            <div class="sign-picker">
+              <label>Партнёр</label>
+              <select id="sign2-select" class="sign-select">
+                <option value="">Выберите знак</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-primary" onclick="app.checkCompatibility()" id="compat-btn">Проверить совместимость</button>
+          <div id="compat-result" class="compat-result" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- Tab: Profile -->
+      <div id="tab-profile" class="tab-content">
+        <div class="page-header compact">
+          <h2 class="page-title">Профиль</h2>
+        </div>
+        <div class="content-area">
+          <div class="profile-card">
+            <div class="profile-avatar" id="profile-avatar">✨</div>
+            <div class="profile-name" id="profile-name">Загрузка...</div>
+            <div class="profile-sub-status" id="profile-sub-status"></div>
+          </div>
+
+          <div class="settings-section">
+            <h3 class="section-title">Данные рождения</h3>
+            <div class="info-row">
+              <span class="info-icon">📅</span>
+              <span class="info-label">Дата рождения</span>
+              <span class="info-value" id="prof-birth-date">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-icon">🕐</span>
+              <span class="info-label">Время рождения</span>
+              <span class="info-value" id="prof-birth-time">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-icon">🏙️</span>
+              <span class="info-label">Город рождения</span>
+              <span class="info-value" id="prof-birth-city">—</span>
+            </div>
+          </div>
+
+          <div class="settings-section" id="sub-section">
+            <h3 class="section-title">Подписка</h3>
+            <div id="sub-details" class="sub-info"></div>
+            <button class="btn-subscribe" id="sub-btn" onclick="app.openSubscribe()">
+              ⭐ Оформить Premium — 49 Stars
+            </button>
+          </div>
+
+          <div class="settings-section">
+            <h3 class="section-title">Быстрые действия</h3>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/today')">
+              🔮 Получить гороскоп в боте
+            </button>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/settings')">
+              ⚙️ Изменить данные рождения
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
