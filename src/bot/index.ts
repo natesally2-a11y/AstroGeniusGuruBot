@@ -62,6 +62,11 @@ export function createBot(): Bot {
     }
   });
 
+  // App store verification command
+  bot.command('appss_verify', async (ctx) => {
+    await ctx.reply('appss_0a3e35');
+  });
+
   // Privacy policy command
   bot.command('privacy', async (ctx) => {
     const webhookUrl = process.env.WEBHOOK_URL || 'https://astroguru-production.up.railway.app';
