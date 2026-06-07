@@ -71,16 +71,17 @@ async function main(): Promise<void> {
 
   // Start bot
   if (WEBHOOK_URL) {
-    // Production: webhook mode
+    // Production: webhook mode — set webhook and drop any stale pending updates
     const webhookUrl = `${WEBHOOK_URL}/webhook/${WEBHOOK_SECRET}`;
     await bot.api.setWebhook(webhookUrl, {
       secret_token: WEBHOOK_SECRET,
       allowed_updates: ['message', 'callback_query', 'pre_checkout_query', 'chat_member'],
+      drop_pending_updates: true,
     });
     logger.info(`Webhook set to: ${webhookUrl}`);
   } else {
     // Development: long polling
-    await bot.api.deleteWebhook();
+    await bot.api.deleteWebhook({ drop_pending_updates: true });
     bot.start({
       onStart: (botInfo) => {
         logger.info(`Bot @${botInfo.username} started in polling mode`);
@@ -92,13 +93,12 @@ async function main(): Promise<void> {
   // Start scheduler for daily horoscopes
   startScheduler(bot);
 
-  // Graceful shutdown
+  // Graceful shutdown — do NOT delete webhook in production so Telegram
+  // keeps queueing updates while the new container starts up
   const shutdown = async (signal: string) => {
     logger.info(`Received ${signal}, shutting down gracefully...`);
     server.close();
-    if (WEBHOOK_URL) {
-      await bot.api.deleteWebhook();
-    } else {
+    if (!WEBHOOK_URL) {
       await bot.stop();
     }
     process.exit(0);
