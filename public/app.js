@@ -400,15 +400,26 @@ class AstroGuruApp {
 
   async openSubscribe() {
     if (!tg) { alert('Откройте через Telegram'); return; }
+    if (this.userData?.isPremium && !this.userData?.isAdmin) {
+      tg.showAlert('✅ У вас уже есть Premium!\n\nОтменить автопродление — кнопка ниже.');
+      return;
+    }
+    const price = this.userData?.prices?.subscription || 99;
+    const agreed = confirm(
+      `Условия подписки Premium:\n\n` +
+      `• ${price} ⭐ в месяц\n` +
+      `• Автосписание каждые 30 дней\n` +
+      `• Отмена в любой момент\n` +
+      `• После отмены Premium до конца оплаченного периода\n\n` +
+      `Согласны?`
+    );
+    if (!agreed) return;
     try {
-      tg.MainButton?.showProgress?.();
       const r = await this.makeRequest('/invoice/subscribe', 'POST');
       tg.showAlert(r.message || 'Счёт отправлен! Проверьте чат с ботом.');
       tg.close();
     } catch (err) {
       tg.showAlert(err.message || 'Ошибка. Попробуйте /subscribe в боте.');
-    } finally {
-      tg.MainButton?.hideProgress?.();
     }
   }
 
@@ -457,22 +468,11 @@ class AstroGuruApp {
         break;
       }
       case 'lucky':
-        await this.loadLuckyCard();
-        document.getElementById('lucky-card')?.scrollIntoView({ behavior: 'smooth' });
+        await this.showLuckyDay();
         break;
-      case 'transits': {
-        try {
-          const data = await this.makeRequest('/transits');
-          const lines = data.transits.map(t =>
-            `${t.energy === 'harmonious' ? '✅' : t.energy === 'challenging' ? '⚠️' : '➡️'} ${t.transitPlanet} → ${t.natalPlanet}: ${t.aspectType}`
-          ).join('\n');
-          if (tg) tg.showAlert(lines || 'Сегодня спокойный день ✨');
-        } catch (err) {
-          if (err.message?.includes('дату')) this.openSettings();
-          else tg?.showAlert(err.message);
-        }
+      case 'transits':
+        await this.showTransits();
         break;
-      }
       default:
         if (tg) tg.openTelegramLink(`https://t.me/${BOT_USERNAME}?start=${cmd}`);
     }
@@ -481,6 +481,54 @@ class AstroGuruApp {
   openPrivacy() {
     const url = window.location.origin + '/privacy';
     if (tg) tg.openLink(url); else window.open(url, '_blank');
+  }
+
+  showActionResult(html) {
+    const el = document.getElementById('profile-action-result');
+    if (!el) return;
+    el.innerHTML = html;
+    el.style.display = 'block';
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  async showLuckyDay() {
+    try {
+      const lucky = await this.makeRequest('/lucky');
+      this.showActionResult(
+        `<div style="font-size:16px;font-weight:700;margin-bottom:10px">🍀 Счастливый день — ${lucky.sign}</div>` +
+        `<div>🔢 <strong>Числа:</strong> ${lucky.numbers.join(', ')}</div>` +
+        `<div>🎨 <strong>Цвет:</strong> ${lucky.color}</div>` +
+        `<div>💎 <strong>Камень:</strong> ${lucky.stone}</div>` +
+        `<div>⏰ <strong>Лучшее время:</strong> ${lucky.bestTime}</div>` +
+        `<div style="margin-top:8px;color:var(--tg-hint);font-size:12px">Используйте для важных дел сегодня</div>`
+      );
+      await this.loadLuckyCard();
+    } catch (err) {
+      if (tg) tg.showAlert(err.message);
+    }
+  }
+
+  async showTransits() {
+    try {
+      const data = await this.makeRequest('/transits');
+      if (!data.transits?.length) {
+        this.showActionResult('🪐 <strong>Сегодня спокойный день</strong><br>Нет сильных транзитов к вашей карте.');
+        return;
+      }
+      let html = `<div style="font-size:16px;font-weight:700;margin-bottom:6px">🪐 Влияние планет сегодня</div>` +
+        `<div style="color:var(--tg-hint);font-size:12px;margin-bottom:12px">${data.description}</div>`;
+      for (const t of data.transits) {
+        const icon = t.energy === 'harmonious' ? '✅' : t.energy === 'challenging' ? '⚠️' : '➡️';
+        html += `<div style="margin-bottom:10px">${icon} <strong>${t.text}</strong>` +
+          (t.hint ? `<div style="color:var(--tg-hint);font-size:12px;margin-top:2px">${t.hint}</div>` : '') +
+          `</div>`;
+      }
+      this.showActionResult(html);
+    } catch (err) {
+      if (err.message?.includes('дату')) {
+        this.showActionResult('📅 <strong>Нужна дата рождения</strong><br><button class="btn-primary" style="margin-top:10px" onclick="app.openSettings()">Указать в боте</button>');
+      } else if (tg) tg.showAlert(err.message);
+    }
   }
 }
 

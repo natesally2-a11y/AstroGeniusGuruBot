@@ -31,23 +31,8 @@ export function createBot(): Bot {
   registerFeaturesHandler(bot);
 
   bot.command('help', async (ctx) => {
-    const price = process.env.SUBSCRIPTION_PRICE || '99';
-    await ctx.reply(
-      `🌟 *AstroGuru — команды:*\n\n` +
-      `/start — Главное меню\n` +
-      `/today — Гороскоп на сегодня\n` +
-      `/moon — Фаза луны\n` +
-      `/lucky — Счастливые числа дня\n` +
-      `/transits — Транзиты планет\n` +
-      `/month — Прогноз на месяц (Premium)\n` +
-      `/subscribe — Premium ${price} ⭐/мес\n` +
-      `/buy_chart — Натальная карта разово\n` +
-      `/cancel — Отменить автопродление\n` +
-      `/settings — Данные рождения\n` +
-      `/privacy — Политика конфиденциальности\n` +
-      `/help — Этот список`,
-      { parse_mode: 'Markdown' }
-    );
+    const { BOT_FEATURES_GUIDE } = await import('./helpers/messages');
+    await ctx.reply(BOT_FEATURES_GUIDE, { parse_mode: 'Markdown' });
   });
 
   // Hidden refund info — not in /help

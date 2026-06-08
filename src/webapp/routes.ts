@@ -243,9 +243,23 @@ router.post('/invoice/natal-chart', requireAuth, async (req: Request, res: Respo
   }
 });
 
+const PLANET_RU: Record<string, string> = {
+  sun: 'Солнце', moon: 'Луна', mercury: 'Меркурий', venus: 'Венера',
+  mars: 'Марс', jupiter: 'Юпитер', saturn: 'Сатурн', ascendant: 'Асцендент',
+};
+const ASPECT_RU: Record<string, string> = {
+  conjunction: 'соединение', opposition: 'оппозиция', trine: 'трин',
+  square: 'квадрат', sextile: 'секстиль',
+};
+const TRANSIT_HINT: Record<string, string> = {
+  harmonious: 'Благоприятное влияние — используйте этот день для соответствующих дел.',
+  challenging: 'Напряжённый аспект — проявите осознанность и терпение.',
+  neutral: 'Нейтральное влияние — наблюдайте за ситуацией.',
+};
+
 router.get('/transits', requireAuth, (req: Request, res: Response) => {
   const user = getUserByTelegramId((req as any).telegramUser.id);
-  if (!user?.birth_date) { res.status(400).json({ error: 'Укажите дату рождения' }); return; }
+  if (!user?.birth_date) { res.status(400).json({ error: 'Укажите дату рождения в /settings' }); return; }
   const chart = calculateNatalChartForUser(
     user.birth_date, user.birth_time, user.birth_lat || 0, user.birth_lon || 0, user.timezone
   );
@@ -254,8 +268,19 @@ router.get('/transits', requireAuth, (req: Request, res: Response) => {
     `${String(today.getDate()).padStart(2,'0')}.${String(today.getMonth()+1).padStart(2,'0')}.${today.getFullYear()}`,
     '12:00', 0, 0, 'UTC'
   );
-  const transits = calculateTransits(chart, transit).slice(0, 6);
-  res.json({ transits });
+  const raw = calculateTransits(chart, transit).slice(0, 6);
+  const transits = raw.map(t => ({
+    ...t,
+    transitPlanetRu: PLANET_RU[t.transitPlanet] || t.transitPlanet,
+    natalPlanetRu: PLANET_RU[t.natalPlanet] || t.natalPlanet,
+    aspectRu: ASPECT_RU[t.aspectType] || t.aspectType,
+    hint: TRANSIT_HINT[t.energy] || '',
+    text: `Транзит ${PLANET_RU[t.transitPlanet]} (${ASPECT_RU[t.aspectType]}) к натальному ${PLANET_RU[t.natalPlanet]}`,
+  }));
+  res.json({
+    description: 'Транзиты показывают, как сегодняшнее положение планет взаимодействует с вашей натальной картой.',
+    transits,
+  });
 });
 
 router.get('/payment-history', requireAuth, (req: Request, res: Response) => {

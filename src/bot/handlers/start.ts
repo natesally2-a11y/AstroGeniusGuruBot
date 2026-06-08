@@ -1,8 +1,11 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { getUserByTelegramId } from '../../database/queries';
+import { hasNatalChartAccess } from '../../payments/stars';
+import { BOT_FEATURES_GUIDE } from '../helpers/messages';
+import { formatLuckyDayMessage } from '../../astrology/lucky';
 import { logger } from '../../utils/logger';
 
-const MINI_APP_URL = process.env.MINI_APP_URL || 'https://yourdomain.com';
+const MINI_APP_URL = process.env.MINI_APP_URL || 'https://astroguru-production.up.railway.app/app';
 
 export function registerStartHandler(bot: Bot): void {
   bot.command('start', async (ctx) => {
@@ -12,102 +15,82 @@ export function registerStartHandler(bot: Bot): void {
 
     logger.info(`/start from ${telegramId}`);
 
-    const price = process.env.SUBSCRIPTION_PRICE || '99';
     const keyboard = new InlineKeyboard()
       .webApp('🌟 Открыть AstroGuru', MINI_APP_URL).row()
       .text('🔮 Гороскоп', 'horoscope_today').text('🌙 Луна', 'moon_phase').row()
       .text('⭐ Premium', 'subscribe_info').text('🍀 Удача', 'lucky_day').row()
       .text('📊 Натальная карта', 'natal_chart').text('💑 Совместимость', 'compatibility').row()
-      .text('⚙️ Настройки', 'settings_menu');
+      .text('📚 Все команды', 'show_commands').text('⚙️ Настройки', 'settings_menu');
 
     if (!user?.birth_date) {
       await ctx.reply(
         `✨ *Добро пожаловать в AstroGuru, ${firstName}!*\n\n` +
-        `Я — ваш личный астрологический помощник. Составлю точный гороскоп на каждый день на основе вашей натальной карты.\n\n` +
-        `🌟 *Что я умею:*\n` +
-        `• Персональный ежедневный гороскоп\n` +
-        `• Расчёт натальной карты\n` +
-        `• Проверка совместимости\n` +
-        `• Недельные и месячные прогнозы\n\n` +
-        `Для начала укажите дату рождения — это займёт всего минуту! 👇`,
+        `Я — ваш личный астролог. Рассчитываю натальную карту, гороскопы и транзиты по вашим данным рождения.\n\n` +
+        `👇 *Начните с даты рождения*, затем изучите все функции:`,
         {
           parse_mode: 'Markdown',
           reply_markup: new InlineKeyboard()
             .text('📅 Указать дату рождения', 'edit_birth_date').row()
-            .webApp('🌟 Открыть приложение', MINI_APP_URL),
+            .webApp('🌟 Открыть приложение', MINI_APP_URL).row()
+            .text('📚 Все команды бота', 'show_commands'),
         }
       );
+      await ctx.reply(BOT_FEATURES_GUIDE, { parse_mode: 'Markdown' });
     } else {
       await ctx.reply(
         `🌟 *С возвращением, ${firstName}!*\n\n` +
-        `Рад снова видеть вас. Чем займёмся сегодня?`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: keyboard,
-        }
+        `Выберите действие на клавиатуре или смотрите все команды ниже 👇`,
+        { parse_mode: 'Markdown', reply_markup: keyboard }
       );
+      await ctx.reply(BOT_FEATURES_GUIDE, { parse_mode: 'Markdown' });
     }
   });
 
+  bot.callbackQuery('show_commands', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.reply(BOT_FEATURES_GUIDE, { parse_mode: 'Markdown' });
+  });
 
   bot.callbackQuery('lucky_day', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
-    await ctx.reply('🍀 Введите /lucky для счастливых чисел дня');
-  });
-
-  bot.callbackQuery('subscribe_info', async (ctx) => {
-    await ctx.answerCallbackQuery().catch(() => {});
-    const price = process.env.SUBSCRIPTION_PRICE || '99';
-    const keyboard = new InlineKeyboard()
-      .text(`⭐ Подписаться за ${price} Stars`, 'confirm_subscribe').row()
-      .text('❓ Что входит в Premium?', 'premium_features');
-
-    await ctx.reply(
-      `⭐ *AstroGuru Premium*\n\n` +
-      `🆓 *Бесплатно:*\n• Базовый гороскоп по знаку Солнца\n\n` +
-      `💎 *Premium — ${price} ⭐ Stars/месяц:*\n` +
-      `• Персональный гороскоп на основе натальной карты\n` +
-      `• Анализ планетарных транзитов\n` +
-      `• Детальная натальная карта\n` +
-      `• Недельный и месячный прогноз\n` +
-      `• Совместимость с любым знаком\n` +
-      `• Ежедневные уведомления в 9:00\n`,
-      { parse_mode: 'Markdown', reply_markup: keyboard }
-    );
-  });
-
-  bot.callbackQuery('premium_features', async (ctx) => {
-    await ctx.answerCallbackQuery({ text: '💎 Premium открывает полный доступ к персональной астрологии!', show_alert: true });
+    const user = getUserByTelegramId(ctx.from.id);
+    await ctx.reply(formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
   });
 
   bot.callbackQuery('natal_chart', async (ctx) => {
-    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery().catch(() => {});
     const user = getUserByTelegramId(ctx.from.id);
     if (!user?.birth_date) {
-      await ctx.reply('📅 Сначала укажите дату рождения командой /settings');
+      await ctx.reply('📅 Сначала укажите дату рождения: /settings');
       return;
     }
-    if (user.subscription_status !== 'premium') {
+    if (!hasNatalChartAccess(user)) {
       await ctx.reply(
-        '🔒 Натальная карта доступна только в *Premium*\n\nОформите подписку командой /subscribe',
+        '🔒 Натальная карта доступна в *Premium* или разово за 99 ⭐\n\n/subscribe или /buy_chart',
         { parse_mode: 'Markdown' }
       );
       return;
     }
-    await ctx.reply('🌟 Открываю вашу натальную карту...', {
-      reply_markup: new InlineKeyboard().webApp('📊 Натальная карта', MINI_APP_URL),
+    await ctx.reply('📊 Ваша натальная карта с домами и аспектами:', {
+      reply_markup: new InlineKeyboard().webApp('🌟 Открыть карту', MINI_APP_URL),
     });
   });
 
   bot.callbackQuery('compatibility', async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await ctx.reply('💑 Выберите знаки для проверки совместимости в Mini App', {
-      reply_markup: new InlineKeyboard().webApp('💑 Открыть совместимость', MINI_APP_URL),
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.reply('💑 Проверьте совместимость знаков в Mini App:', {
+      reply_markup: new InlineKeyboard().webApp('💑 Совместимость', MINI_APP_URL),
     });
   });
 
   bot.callbackQuery('settings_menu', async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await ctx.reply('⚙️ Настройки — используйте команду /settings');
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.reply(
+      '⚙️ *Настройки данных рождения*\n\nКоманда /settings — укажите дату, время и город рождения для точных расчётов.',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: new InlineKeyboard().text('📅 Указать дату', 'edit_birth_date'),
+      }
+    );
   });
 }

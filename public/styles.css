@@ -47,6 +47,16 @@
   color: var(--tg-hint);
 }
 
+.action-result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 * {
   margin: 0;
   padding: 0;

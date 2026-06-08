@@ -137,8 +137,11 @@
           <div class="settings-section" id="sub-section">
             <h3 class="section-title">Подписка</h3>
             <div id="sub-details" class="sub-info"></div>
+            <p class="sub-terms-hint" style="font-size:12px;color:var(--tg-hint);margin:8px 0">
+              99 ⭐/мес · автосписание · отмена в любой момент · действует до конца периода
+            </p>
             <button class="btn-subscribe" id="sub-btn" onclick="app.openSubscribe()">⭐ Premium — 99 ⭐/мес</button>
-            <button class="btn-secondary" id="cancel-sub-btn" style="display:none;margin-top:8px" onclick="app.cancelSubscription()">Отменить автопродление</button>
+            <button class="btn-secondary" id="cancel-sub-btn" style="display:none;margin-top:8px" onclick="app.cancelSubscription()">❌ Отменить автопродление</button>
           </div>
 
           <div class="settings-section">
@@ -148,11 +151,12 @@
 
           <div class="settings-section">
             <h3 class="section-title">Быстрые действия</h3>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/today')">🔮 Гороскоп в боте</button>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/settings')">⚙️ Изменить данные</button>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/today')">🔮 Гороскоп на сегодня</button>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/settings')">⚙️ Изменить данные рождения</button>
+            <button class="btn-secondary" onclick="app.showLuckyDay()">🍀 Счастливый день</button>
+            <button class="btn-secondary" onclick="app.showTransits()">🪐 Влияние планет сегодня</button>
             <button class="btn-secondary" onclick="app.sendBotCommand('/moon')">🌙 Фаза луны</button>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/lucky')">🍀 Счастливый день</button>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/transits')">🪐 Транзиты</button>
+            <div id="profile-action-result" class="action-result-card" style="display:none"></div>
           </div>
 
           <div class="settings-section">

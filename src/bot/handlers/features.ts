@@ -1,8 +1,9 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { getUserByTelegramId } from '../../database/queries';
-import { getMoonPhase, getLuckyDay } from '../../astrology/features';
+import { getMoonPhase } from '../../astrology/features';
+import { formatLuckyDayMessage } from '../../astrology/lucky';
 import { generateMonthlyHoroscope } from '../../astrology/horoscope';
-import { calculateNatalChartForUser, parseBirthDate, toJulianDay, calculateSunPosition } from '../../astrology/engine';
+import { calculateNatalChartForUser } from '../../astrology/engine';
 import { isSubscriptionActive } from '../../payments/stars';
 import { logger } from '../../utils/logger';
 
@@ -29,21 +30,7 @@ export function registerFeaturesHandler(bot: Bot): void {
 
   bot.command('lucky', async (ctx) => {
     const user = getUserByTelegramId(ctx.from!.id);
-    let signIdx = 0;
-    if (user?.birth_date) {
-      const { year, month, day } = parseBirthDate(user.birth_date);
-      const sun = calculateSunPosition(toJulianDay(year, month, day, 12, 0));
-      signIdx = sun.signIndex;
-    }
-    const lucky = getLuckyDay(signIdx);
-    await ctx.reply(
-      `🍀 *Счастливый день для ${lucky.sign}*\n\n` +
-      `🔢 Числа: *${lucky.numbers.join(', ')}*\n` +
-      `🎨 Цвет: *${lucky.color}*\n` +
-      `💎 Камень: *${lucky.stone}*\n` +
-      `⏰ Лучшее время: *${lucky.bestTime}*`,
-      { parse_mode: 'Markdown' }
-    );
+    await ctx.reply(formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
   });
 
   bot.command('month', async (ctx) => {
@@ -82,11 +69,27 @@ export function registerFeaturesHandler(bot: Bot): void {
       return;
     }
 
-    const lines = transits.map(t =>
-      `${t.energy === 'harmonious' ? '✅' : t.energy === 'challenging' ? '⚠️' : '➡️'} ` +
-      `${t.transitPlanet} → ${t.natalPlanet}: ${t.aspectType}`
+    const planetRu: Record<string, string> = {
+      sun: 'Солнце', moon: 'Луна', mercury: 'Меркурий', venus: 'Венера',
+      mars: 'Марс', jupiter: 'Юпитер', saturn: 'Сатурн', ascendant: 'Асцендент',
+    };
+    const aspectRu: Record<string, string> = {
+      conjunction: 'соединение', opposition: 'оппозиция', trine: 'трин',
+      square: 'квадрат', sextile: 'секстиль',
+    };
+    const lines = transits.map(t => {
+      const icon = t.energy === 'harmonious' ? '✅' : t.energy === 'challenging' ? '⚠️' : '➡️';
+      const tp = planetRu[t.transitPlanet] || t.transitPlanet;
+      const np = planetRu[t.natalPlanet] || t.natalPlanet;
+      const asp = aspectRu[t.aspectType] || t.aspectType;
+      return `${icon} Транзит *${tp}* ${asp} натальное *${np}*`;
+    });
+    await ctx.reply(
+      `🪐 *Транзиты планет сегодня*\n` +
+      `_Как текущее положение планет влияет на вашу натальную карту:_\n\n` +
+      lines.join('\n'),
+      { parse_mode: 'Markdown' }
     );
-    await ctx.reply(`🪐 *Транзиты сегодня*\n\n${lines.join('\n')}`, { parse_mode: 'Markdown' });
   });
 
   bot.command('cancel', async (ctx) => {
