@@ -86,10 +86,31 @@ export function initializeDatabase(): void {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS chart_interpretations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      month_key TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, month_key)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
     CREATE INDEX IF NOT EXISTS idx_horoscopes_user_date ON horoscopes(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
   `);
+
+  // Migrations for existing databases
+  const migrations = [
+    `ALTER TABLE users ADD COLUMN auto_renew INTEGER DEFAULT 1`,
+    `ALTER TABLE users ADD COLUMN natal_chart_unlocked INTEGER DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN natal_chart_unlocked_until TEXT`,
+    `ALTER TABLE payments ADD COLUMN payment_type TEXT DEFAULT 'subscription'`,
+  ];
+  for (const sql of migrations) {
+    try { db.exec(sql); } catch { /* column exists */ }
+  }
 
   logger.info('Database initialized successfully');
 }

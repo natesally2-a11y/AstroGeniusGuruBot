@@ -1,17 +1,19 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { getUserByTelegramId } from '../../database/queries';
-import { sendSubscriptionInvoice, isSubscriptionActive } from '../../payments/stars';
+import {
+  sendSubscriptionInvoice, sendNatalChartInvoice,
+  isSubscriptionActive, SUBSCRIPTION_PRICE, NATAL_CHART_PRICE,
+} from '../../payments/stars';
 import { logger } from '../../utils/logger';
 
 export function registerSubscribeHandler(bot: Bot): void {
   bot.command('subscribe', async (ctx) => {
     const telegramId = ctx.from!.id;
     const user = getUserByTelegramId(telegramId);
-
     logger.info(`/subscribe from ${telegramId}`);
 
     if (!user) {
-      await ctx.reply('❗ Пожалуйста, начните с команды /start');
+      await ctx.reply('❗ Начните с /start');
       return;
     }
 
@@ -23,66 +25,88 @@ export function registerSubscribeHandler(bot: Bot): void {
         : 'бессрочно';
 
       await ctx.reply(
-        `✅ *У вас активна подписка Premium!*\n\n📅 Действует до: *${expiresDate}*\n\n` +
-        `Вы уже пользуетесь всеми преимуществами AstroGuru Premium:\n` +
-        `• Персональный гороскоп\n• Натальная карта\n• Транзиты планет\n• Совместимость`,
+        `✅ *Premium активен до ${expiresDate}*\n\n` +
+        `Отменить автопродление: /cancel\n` +
+        `Разовая натальная карта без подписки: /buy_chart`,
         {
           parse_mode: 'Markdown',
           reply_markup: new InlineKeyboard()
-            .text('🔄 Продлить подписку', 'confirm_subscribe').row()
-            .text('🔮 Мой гороскоп', 'horoscope_today'),
+            .text('🔄 Продлить', 'confirm_subscribe').row()
+            .text('🔮 Гороскоп', 'horoscope_today'),
         }
       );
       return;
     }
 
-    const price = process.env.SUBSCRIPTION_PRICE || '49';
-    const days = process.env.SUBSCRIPTION_DAYS || '30';
-
     await ctx.reply(
-      `⭐ *AstroGuru Premium*\n\n` +
-      `Получите полный доступ к персональной астрологии!\n\n` +
-      `💎 *Что входит в Premium:*\n` +
-      `✅ Персональный гороскоп на основе натальной карты\n` +
-      `✅ Анализ планетарных транзитов\n` +
-      `✅ Детальная натальная карта с домами\n` +
-      `✅ Недельный и месячный прогноз\n` +
-      `✅ Совместимость с любым знаком\n` +
-      `✅ Ежедневные уведомления в 9:00\n\n` +
-      `💰 *Стоимость:* ${price} ⭐ Telegram Stars / ${days} дней\n\n` +
-      `_Оплата производится через безопасную систему Telegram Stars_`,
+      `⭐ *AstroGuru Premium — ${SUBSCRIPTION_PRICE} ⭐/мес*\n\n` +
+      `💎 *В подписке:*\n` +
+      `✅ Персональный AI-гороскоп по натальной карте\n` +
+      `✅ Натальная карта с подробной интерпретацией\n` +
+      `✅ Транзиты, недельный и месячный прогноз\n` +
+      `✅ Совместимость и фаза луны\n` +
+      `✅ Утренние уведомления в 9:00 по вашему времени\n\n` +
+      `🔄 *Ежемесячное списание ${SUBSCRIPTION_PRICE} ⭐*. Отмена в любой момент: /cancel\n\n` +
+      `🌌 *Разовая натальная карта:* ${NATAL_CHART_PRICE} ⭐ без подписки → /buy_chart`,
       {
         parse_mode: 'Markdown',
         reply_markup: new InlineKeyboard()
-          .text(`⭐ Оплатить ${price} Stars`, 'confirm_subscribe').row()
-          .text('❓ Что такое Telegram Stars?', 'stars_info'),
+          .text(`⭐ Подписаться — ${SUBSCRIPTION_PRICE} ⭐/мес`, 'confirm_subscribe').row()
+          .text(`🌌 Карта разово — ${NATAL_CHART_PRICE} ⭐`, 'buy_natal_chart').row()
+          .text('❓ Telegram Stars', 'stars_info'),
       }
     );
   });
 
-  bot.callbackQuery('confirm_subscribe', async (ctx) => {
-    await ctx.answerCallbackQuery();
-    const telegramId = ctx.from.id;
-    const user = getUserByTelegramId(telegramId);
-
-    if (!user) {
-      await ctx.reply('❗ Ошибка. Попробуйте /start');
+  bot.command('buy_chart', async (ctx) => {
+    const user = getUserByTelegramId(ctx.from!.id);
+    if (!user) { await ctx.reply('❗ /start'); return; }
+    if (!user.birth_date) {
+      await ctx.reply('📅 Сначала укажите дату рождения: /settings');
       return;
     }
+    await sendNatalChartInvoice(bot, ctx.chat!.id, user.id);
+  });
 
+  bot.callbackQuery('confirm_subscribe', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    const user = getUserByTelegramId(ctx.from.id);
+    if (!user) { await ctx.reply('❗ /start'); return; }
     try {
       await sendSubscriptionInvoice(bot, ctx.chat!.id, user.id);
     } catch (error) {
-      logger.error('Failed to send invoice from callback', { error, telegramId });
-      await ctx.reply('❌ Не удалось создать счёт. Попробуйте позже или обратитесь в поддержку.');
+      logger.error('Invoice error', { error });
+      await ctx.reply('❌ Не удалось создать счёт. Попробуйте позже.');
     }
+  });
+
+  bot.callbackQuery('buy_natal_chart', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    const user = getUserByTelegramId(ctx.from.id);
+    if (!user?.birth_date) {
+      await ctx.reply('📅 Укажите дату рождения: /settings');
+      return;
+    }
+    await sendNatalChartInvoice(bot, ctx.chat!.id, user.id);
+  });
+
+  bot.callbackQuery('subscribe_info', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.reply(
+      `⭐ Premium — ${SUBSCRIPTION_PRICE} ⭐/мес\n` +
+      `Персональный гороскоп, натальная карта, транзиты, месячный прогноз.\n` +
+      `Отмена: /cancel`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text(`⭐ Оформить — ${SUBSCRIPTION_PRICE} ⭐`, 'confirm_subscribe'),
+      }
+    );
   });
 
   bot.callbackQuery('stars_info', async (ctx) => {
     await ctx.answerCallbackQuery({
-      text: 'Telegram Stars — официальная цифровая валюта Telegram для оплаты в ботах и мини-приложениях. ' +
-        'Купить Stars можно прямо в приложении Telegram.',
+      text: 'Telegram Stars — официальная валюта Telegram. Купить можно в настройках Telegram.',
       show_alert: true,
-    });
+    }).catch(() => {});
   });
 }

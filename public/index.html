@@ -11,7 +11,6 @@
 </head>
 <body>
   <div id="app">
-    <!-- Loading Screen -->
     <div id="loading-screen" class="screen active">
       <div class="loading-content">
         <div class="star-burst">✨</div>
@@ -21,29 +20,23 @@
       </div>
     </div>
 
-    <!-- Main App -->
     <div id="main-app" class="screen">
-      <!-- Bottom Navigation -->
       <nav class="bottom-nav">
         <button class="nav-btn active" data-tab="horoscope">
-          <span class="nav-icon">🔮</span>
-          <span>Гороскоп</span>
+          <span class="nav-icon">🔮</span><span>Гороскоп</span>
         </button>
         <button class="nav-btn" data-tab="chart">
-          <span class="nav-icon">⭕</span>
-          <span>Карта</span>
+          <span class="nav-icon">⭕</span><span>Карта</span>
         </button>
         <button class="nav-btn" data-tab="compat">
-          <span class="nav-icon">💑</span>
-          <span>Совместим.</span>
+          <span class="nav-icon">💑</span><span>Совместим.</span>
         </button>
         <button class="nav-btn" data-tab="profile">
-          <span class="nav-icon">👤</span>
-          <span>Профиль</span>
+          <span class="nav-icon">👤</span><span>Профиль</span>
         </button>
       </nav>
 
-      <!-- Tab: Horoscope -->
+      <!-- Horoscope -->
       <div id="tab-horoscope" class="tab-content active">
         <div class="page-header">
           <div class="header-gradient"></div>
@@ -55,79 +48,68 @@
                 <span class="sign-detail" id="header-sign-detail"></span>
               </div>
             </div>
-            <div class="premium-badge" id="premium-badge" style="display:none">
-              <span>⭐ PREMIUM</span>
-            </div>
+            <div class="premium-badge" id="premium-badge" style="display:none"><span>⭐ PREMIUM</span></div>
           </div>
         </div>
-
         <div class="content-area">
+          <div id="moon-banner" class="moon-banner" style="display:none"></div>
           <div class="horoscope-tabs">
             <button class="htab active" data-htype="daily">Сегодня</button>
             <button class="htab" data-htype="weekly">Неделя</button>
+            <button class="htab" data-htype="monthly">Месяц</button>
           </div>
-
           <div id="horoscope-content" class="horoscope-card">
             <div class="skeleton-loading">
-              <div class="skeleton-line"></div>
-              <div class="skeleton-line short"></div>
-              <div class="skeleton-line"></div>
-              <div class="skeleton-line short"></div>
+              <div class="skeleton-line"></div><div class="skeleton-line short"></div>
+              <div class="skeleton-line"></div><div class="skeleton-line short"></div>
             </div>
           </div>
-
+          <div id="lucky-card" class="lucky-card" style="display:none"></div>
           <div id="upgrade-banner" class="upgrade-banner" style="display:none">
             <div class="upgrade-icon">⭐</div>
             <div class="upgrade-text">
               <strong>Получите Premium</strong>
-              <span>Персональный гороскоп на основе натальной карты</span>
+              <span>AI-гороскоп по натальной карте · 99 ⭐/мес</span>
             </div>
-            <button class="upgrade-btn" onclick="app.openSubscribe()">49 ⭐</button>
+            <button class="upgrade-btn" onclick="app.openSubscribe()">99 ⭐</button>
           </div>
         </div>
       </div>
 
-      <!-- Tab: Natal Chart -->
+      <!-- Natal Chart -->
       <div id="tab-chart" class="tab-content">
-        <div class="page-header compact">
-          <h2 class="page-title">Натальная карта</h2>
-        </div>
+        <div class="page-header compact"><h2 class="page-title">Натальная карта</h2></div>
         <div class="content-area">
           <div id="chart-locked" class="locked-feature" style="display:none">
             <div class="lock-icon">🔒</div>
-            <h3>Доступно в Premium</h3>
-            <p>Натальная карта рассчитывается по точным данным рождения и показывает положение всех планет в момент вашего появления на свет.</p>
-            <button class="btn-primary" onclick="app.openSubscribe()">⭐ Получить Premium за 49 Stars</button>
+            <h3>Натальная карта</h3>
+            <p>Полная карта рождения с AI-интерпретацией всех планет, домов и аспектов. Обновляется каждый месяц.</p>
+            <button class="btn-primary" onclick="app.openSubscribe()">⭐ Premium — 99 ⭐/мес</button>
+            <button class="btn-secondary" style="margin-top:10px" onclick="app.buyNatalChart()">🌌 Разово — 99 ⭐</button>
           </div>
-
           <div id="chart-container" style="display:none">
             <div class="natal-chart-wrapper">
-              <canvas id="natal-chart-canvas" width="320" height="320"></canvas>
+              <canvas id="natal-chart-canvas" width="340" height="340"></canvas>
             </div>
             <div id="planets-list" class="planets-grid"></div>
+            <div id="chart-interpretation" class="horoscope-card" style="margin-top:12px"></div>
           </div>
         </div>
       </div>
 
-      <!-- Tab: Compatibility -->
+      <!-- Compatibility -->
       <div id="tab-compat" class="tab-content">
-        <div class="page-header compact">
-          <h2 class="page-title">Совместимость</h2>
-        </div>
+        <div class="page-header compact"><h2 class="page-title">Совместимость</h2></div>
         <div class="content-area">
           <div class="compat-selector">
             <div class="sign-picker">
               <label>Ваш знак</label>
-              <select id="sign1-select" class="sign-select">
-                <option value="">Выберите знак</option>
-              </select>
+              <select id="sign1-select" class="sign-select"><option value="">Выберите знак</option></select>
             </div>
             <div class="compat-heart">💕</div>
             <div class="sign-picker">
               <label>Партнёр</label>
-              <select id="sign2-select" class="sign-select">
-                <option value="">Выберите знак</option>
-              </select>
+              <select id="sign2-select" class="sign-select"><option value="">Выберите знак</option></select>
             </div>
           </div>
           <button class="btn-primary" onclick="app.checkCompatibility()" id="compat-btn">Проверить совместимость</button>
@@ -135,11 +117,9 @@
         </div>
       </div>
 
-      <!-- Tab: Profile -->
+      <!-- Profile -->
       <div id="tab-profile" class="tab-content">
-        <div class="page-header compact">
-          <h2 class="page-title">Профиль</h2>
-        </div>
+        <div class="page-header compact"><h2 class="page-title">Профиль</h2></div>
         <div class="content-area">
           <div class="profile-card">
             <div class="profile-avatar" id="profile-avatar">✨</div>
@@ -149,52 +129,40 @@
 
           <div class="settings-section">
             <h3 class="section-title">Данные рождения</h3>
-            <div class="info-row">
-              <span class="info-icon">📅</span>
-              <span class="info-label">Дата рождения</span>
-              <span class="info-value" id="prof-birth-date">—</span>
-            </div>
-            <div class="info-row">
-              <span class="info-icon">🕐</span>
-              <span class="info-label">Время рождения</span>
-              <span class="info-value" id="prof-birth-time">—</span>
-            </div>
-            <div class="info-row">
-              <span class="info-icon">🏙️</span>
-              <span class="info-label">Город рождения</span>
-              <span class="info-value" id="prof-birth-city">—</span>
-            </div>
+            <div class="info-row"><span class="info-icon">📅</span><span class="info-label">Дата</span><span class="info-value" id="prof-birth-date">—</span></div>
+            <div class="info-row"><span class="info-icon">🕐</span><span class="info-label">Время</span><span class="info-value" id="prof-birth-time">—</span></div>
+            <div class="info-row"><span class="info-icon">🏙️</span><span class="info-label">Город</span><span class="info-value" id="prof-birth-city">—</span></div>
           </div>
 
           <div class="settings-section" id="sub-section">
             <h3 class="section-title">Подписка</h3>
             <div id="sub-details" class="sub-info"></div>
-            <button class="btn-subscribe" id="sub-btn" onclick="app.openSubscribe()">
-              ⭐ Оформить Premium — 49 Stars
-            </button>
+            <button class="btn-subscribe" id="sub-btn" onclick="app.openSubscribe()">⭐ Premium — 99 ⭐/мес</button>
+            <button class="btn-secondary" id="cancel-sub-btn" style="display:none;margin-top:8px" onclick="app.cancelSubscription()">Отменить автопродление</button>
+          </div>
+
+          <div class="settings-section">
+            <h3 class="section-title">Разовые покупки</h3>
+            <button class="btn-secondary" onclick="app.buyNatalChart()">🌌 Натальная карта — 99 ⭐</button>
           </div>
 
           <div class="settings-section">
             <h3 class="section-title">Быстрые действия</h3>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/today')">
-              🔮 Получить гороскоп в боте
-            </button>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/settings')">
-              ⚙️ Изменить данные рождения
-            </button>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/today')">🔮 Гороскоп в боте</button>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/settings')">⚙️ Изменить данные</button>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/moon')">🌙 Фаза луны</button>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/lucky')">🍀 Счастливый день</button>
+            <button class="btn-secondary" onclick="app.sendBotCommand('/transits')">🪐 Транзиты</button>
           </div>
 
           <div class="settings-section">
             <h3 class="section-title">Документы</h3>
-            <button class="btn-secondary" onclick="app.openPrivacy()">
-              📄 Политика конфиденциальности
-            </button>
+            <button class="btn-secondary" onclick="app.openPrivacy()">📄 Политика конфиденциальности</button>
           </div>
         </div>
       </div>
     </div>
   </div>
-
   <script src="app.js"></script>
 </body>
 </html>

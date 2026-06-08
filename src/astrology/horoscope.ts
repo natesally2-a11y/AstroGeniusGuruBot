@@ -1,9 +1,12 @@
 import {
   NatalChartData, Transit, ZodiacSign, ZODIAC_SIGNS, ZODIAC_EMOJI,
-  calculateNatalChart, calculateTransits, calculateSunPosition,
-  parseBirthDate, parseBirthTime, toJulianDay,
+  calculateNatalChart, calculateNatalChartForUser, calculateTransits,
+  calculateSunPosition, parseBirthDate, toJulianDay,
 } from './engine';
 import { User } from '../database/queries';
+import { isSubscriptionActive } from '../payments/stars';
+import { generateAstrologyText } from '../ai/llm';
+import { getMoonPhase } from './features';
 
 // ─── Planet descriptions ──────────────────────────────────────────────────────
 
@@ -237,7 +240,11 @@ ${transitText.trim()}
 
 // ─── Generate horoscope for user ──────────────────────────────────────────────
 
-export function generateDailyHoroscope(user: User, date?: Date): string {
+export async function generateDailyHoroscope(
+  user: User,
+  date?: Date,
+  useAi = true
+): Promise<string> {
   const today = date || new Date();
 
   if (!user.birth_date) {
@@ -245,44 +252,58 @@ export function generateDailyHoroscope(user: User, date?: Date): string {
   }
 
   const { year, month, day } = parseBirthDate(user.birth_date);
-  const { hour, minute } = parseBirthTime(user.birth_time);
   const lat = user.birth_lat || 0;
   const lon = user.birth_lon || 0;
+  const tz = user.timezone || 'Europe/Moscow';
 
-  if (user.subscription_status !== 'premium') {
-    // Free tier: sun sign only
+  if (!isSubscriptionActive(user)) {
     const jd = toJulianDay(year, month, day, 12, 0);
     const sunPos = calculateSunPosition(jd);
-    return generateFreeHoroscope(sunPos.sign, today);
+    const free = generateFreeHoroscope(sunPos.sign, today);
+    const moon = getMoonPhase(today);
+    if (!useAi) return free + `\n\n${moon.emoji} *Луна:* ${moon.phase} в ${moon.sign}`;
+    return generateAstrologyText(
+      'Дополни бесплатный гороскоп по солнечному знаку. Кратко, 3-4 предложения.',
+      `Знак: ${sunPos.sign}\nФаза луны: ${moon.phase} в ${moon.sign}\nБазовый текст:\n${free}`,
+      free + `\n\n${moon.emoji} *Луна:* ${moon.phase} в ${moon.sign}`
+    );
   }
 
-  // Premium: full calculation
-  const natalChart = calculateNatalChart(year, month, day, hour, minute, lat, lon);
-  const todayDate = today;
+  const natalChart = calculateNatalChartForUser(user.birth_date, user.birth_time, lat, lon, tz);
   const transitChart = calculateNatalChart(
-    todayDate.getFullYear(),
-    todayDate.getMonth() + 1,
-    todayDate.getDate(),
-    12, 0, 0, 0
+    today.getFullYear(), today.getMonth() + 1, today.getDate(), 12, 0, 0, 0
   );
   const transits = calculateTransits(natalChart, transitChart);
+  const fallback = generatePremiumHoroscope(user, natalChart, transits, today);
+  const moon = getMoonPhase(today);
 
-  return generatePremiumHoroscope(user, natalChart, transits, today);
+  if (!useAi) return fallback;
+
+  const transitSummary = transits.slice(0, 5).map(t =>
+    `${t.transitPlanet} ${t.aspectType} ${t.natalPlanet} (${t.energy})`
+  ).join(', ');
+
+  return generateAstrologyText(
+    'Создай персональный ежедневный гороскоп на основе натальной карты и транзитов. ' +
+      'Используй Markdown: *жирный*, эмодзи. Структура: энергия дня, транзиты, совет, числа.',
+    `Имя: ${user.first_name}\nСолнце: ${natalChart.sun.sign}, Луна: ${natalChart.moon.sign}, ` +
+      `Асцендент: ${natalChart.ascendant.sign}\nТранзиты: ${transitSummary}\n` +
+      `Луна сегодня: ${moon.phase} в ${moon.sign}\nДата: ${today.toLocaleDateString('ru-RU')}`,
+    fallback
+  );
 }
 
 // ─── Weekly horoscope ─────────────────────────────────────────────────────────
 
-export function generateWeeklyHoroscope(user: User): string {
+export async function generateWeeklyHoroscope(user: User, useAi = true): Promise<string> {
   if (!user.birth_date) {
     return '🔮 Для получения гороскопа введите дату рождения командой /settings';
   }
 
-  const { year, month, day } = parseBirthDate(user.birth_date);
-  const { hour, minute } = parseBirthTime(user.birth_time);
   const lat = user.birth_lat || 0;
   const lon = user.birth_lon || 0;
-
-  const natalChart = calculateNatalChart(year, month, day, hour, minute, lat, lon);
+  const tz = user.timezone || 'Europe/Moscow';
+  const natalChart = calculateNatalChartForUser(user.birth_date, user.birth_time, lat, lon, tz);
   const sunSign = natalChart.sun.sign;
   const moonSign = natalChart.moon.sign;
   const sunEmoji = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(sunSign)];
@@ -305,7 +326,7 @@ export function generateWeeklyHoroscope(user: User): string {
   const numbers = LUCKY_NUMBERS[sunSign];
   const color = LUCKY_COLORS[sunSign];
 
-  return `${sunEmoji} *Недельный гороскоп*
+  const fallback = `${sunEmoji} *Недельный гороскоп*
 📅 ${formatDate(weekStart)} – ${formatDate(weekEnd)}
 
 ${forecasts.join('\n\n')}
@@ -314,4 +335,35 @@ ${forecasts.join('\n\n')}
 🎨 *Цвет недели:* ${color}
 
 _Ваше Солнце в ${sunSign}, Луна в ${moonSign}_`;
+
+  if (!useAi) return fallback;
+
+  return generateAstrologyText(
+    'Создай недельный астрологический прогноз. Разбей по сферам: карьера, любовь, финансы, здоровье.',
+    `Солнце: ${sunSign}, Луна: ${moonSign}, Асцендент: ${natalChart.ascendant.sign}\n` +
+      `Неделя: ${formatDate(weekStart)} – ${formatDate(weekEnd)}`,
+    fallback
+  );
+}
+
+export async function generateMonthlyHoroscope(user: User): Promise<string> {
+  if (!user.birth_date) {
+    return '🔮 Укажите дату рождения в /settings';
+  }
+  const tz = user.timezone || 'Europe/Moscow';
+  const natalChart = calculateNatalChartForUser(
+    user.birth_date, user.birth_time, user.birth_lat || 0, user.birth_lon || 0, tz
+  );
+  const now = new Date();
+  const monthName = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+  const fallback = `🌙 *Прогноз на ${monthName}*\n\n` +
+    `Солнце в ${natalChart.sun.sign}, Луна в ${natalChart.moon.sign}.\n` +
+    `Месяц благоприятен для развития качеств знака ${natalChart.sun.sign}.`;
+
+  return generateAstrologyText(
+    'Создай месячный астрологический прогноз с ключевыми датами и рекомендациями.',
+    `Месяц: ${monthName}\nКарта: Солнце ${natalChart.sun.sign}, Луна ${natalChart.moon.sign}, ` +
+      `Асцендент ${natalChart.ascendant.sign}`,
+    fallback
+  );
 }

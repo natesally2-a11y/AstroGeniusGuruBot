@@ -1,6 +1,6 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { getUserByTelegramId, updateUserBirthData, saveNatalChart, getNatalChart } from '../../database/queries';
-import { calculateNatalChart, parseBirthDate, parseBirthTime, ZODIAC_EMOJI, ZODIAC_SIGNS } from '../../astrology/engine';
+import { calculateNatalChartForUser, parseBirthDate, parseBirthTime, ZODIAC_EMOJI, ZODIAC_SIGNS } from '../../astrology/engine';
 import { logger } from '../../utils/logger';
 
 // Shared in-memory state for multi-step conversations
@@ -306,16 +306,15 @@ function getCityCoordinates(city: string): { lat: number; lon: number; timezone:
 
 async function recalculateAndSaveChart(
   userId: number,
-  user: { birth_date?: string; birth_time?: string; birth_lat?: number; birth_lon?: number }
+  user: { birth_date?: string; birth_time?: string; birth_lat?: number; birth_lon?: number; timezone?: string }
 ): Promise<void> {
   if (!user.birth_date) return;
 
-  const { year, month, day } = parseBirthDate(user.birth_date);
-  const { hour, minute } = parseBirthTime(user.birth_time);
   const lat = user.birth_lat || 0;
   const lon = user.birth_lon || 0;
+  const tz = user.timezone || 'Europe/Moscow';
 
-  const chart = calculateNatalChart(year, month, day, hour, minute, lat, lon);
+  const chart = calculateNatalChartForUser(user.birth_date, user.birth_time, lat, lon, tz);
 
   saveNatalChart({
     user_id: userId,

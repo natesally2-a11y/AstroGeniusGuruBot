@@ -3,6 +3,8 @@
  * Implements accurate planetary position calculations
  */
 
+import { localBirthToUtc } from './timezone';
+
 export const ZODIAC_SIGNS = [
   'Овен', 'Телец', 'Близнецы', 'Рак',
   'Лев', 'Дева', 'Весы', 'Скорпион',
@@ -401,4 +403,17 @@ export function parseBirthTime(birthTime?: string): { hour: number; minute: numb
   if (!birthTime) return { hour: 12, minute: 0 };
   const parts = birthTime.split(':');
   return { hour: parseInt(parts[0]) || 12, minute: parseInt(parts[1]) || 0 };
+}
+
+export function calculateNatalChartForUser(
+  birthDate: string,
+  birthTime?: string,
+  lat = 0,
+  lon = 0,
+  timezone = 'Europe/Moscow'
+): NatalChartData {
+  const { year, month, day } = parseBirthDate(birthDate);
+  const { hour, minute } = parseBirthTime(birthTime);
+  const utc = localBirthToUtc(year, month, day, hour, minute, timezone);
+  return calculateNatalChart(utc.year, utc.month, utc.day, utc.hour, utc.minute, lat, lon);
 }

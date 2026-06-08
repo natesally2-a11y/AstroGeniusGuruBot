@@ -16,6 +16,9 @@ export interface User {
   subscription_expires?: string;
   language_code: string;
   daily_horoscope_enabled: number;
+  auto_renew?: number;
+  natal_chart_unlocked?: number;
+  natal_chart_unlocked_until?: string;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +43,7 @@ export interface Payment {
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
   subscription_days: number;
+  payment_type?: string;
   created_at: string;
 }
 
@@ -120,6 +124,34 @@ export function updateSubscription(telegramId: number, status: 'free' | 'premium
   `).run({ status, expires: expiresAt || null, telegram_id: telegramId });
 }
 
+export function setAutoRenew(telegramId: number, autoRenew: boolean): void {
+  db.prepare(`
+    UPDATE users SET auto_renew = @autoRenew, updated_at = datetime('now')
+    WHERE telegram_id = @telegram_id
+  `).run({ autoRenew: autoRenew ? 1 : 0, telegram_id: telegramId });
+}
+
+export function unlockNatalChart(telegramId: number, until?: string): void {
+  db.prepare(`
+    UPDATE users SET
+      natal_chart_unlocked = 1,
+      natal_chart_unlocked_until = @until,
+      updated_at = datetime('now')
+    WHERE telegram_id = @telegram_id
+  `).run({ until: until || null, telegram_id: telegramId });
+}
+
+export function downgradeExpiredSubscriptions(): number {
+  const result = db.prepare(`
+    UPDATE users SET subscription_status = 'free'
+    WHERE subscription_status = 'premium'
+    AND subscription_expires IS NOT NULL
+    AND subscription_expires <= datetime('now')
+    AND (auto_renew = 0 OR auto_renew IS NULL)
+  `).run();
+  return result.changes;
+}
+
 export function getAllActiveSubscribers(): User[] {
   return db.prepare(`
     SELECT * FROM users
@@ -184,12 +216,35 @@ export function createPayment(data: {
   user_id: number;
   amount: number;
   subscription_days?: number;
+  payment_type?: string;
 }): number {
   const result = db.prepare(`
-    INSERT INTO payments (user_id, amount, subscription_days)
-    VALUES (@user_id, @amount, @subscription_days)
-  `).run({ subscription_days: 30, ...data });
+    INSERT INTO payments (user_id, amount, subscription_days, payment_type)
+    VALUES (@user_id, @amount, @subscription_days, @payment_type)
+  `).run({ subscription_days: 30, payment_type: 'subscription', ...data });
   return result.lastInsertRowid as number;
+}
+
+export function getChartInterpretation(userId: number, monthKey: string): { content: string } | undefined {
+  return db.prepare(`
+    SELECT content FROM chart_interpretations WHERE user_id = ? AND month_key = ?
+  `).get(userId, monthKey) as { content: string } | undefined;
+}
+
+export function saveChartInterpretation(userId: number, monthKey: string, content: string): void {
+  db.prepare(`
+    INSERT OR REPLACE INTO chart_interpretations (user_id, month_key, content)
+    VALUES (@userId, @monthKey, @content)
+  `).run({ userId, monthKey, content });
+}
+
+export function getLastPaymentChargeId(userId: number): string | undefined {
+  const row = db.prepare(`
+    SELECT telegram_payment_charge_id FROM payments
+    WHERE user_id = ? AND status = 'completed' AND telegram_payment_charge_id IS NOT NULL
+    ORDER BY created_at DESC LIMIT 1
+  `).get(userId) as { telegram_payment_charge_id: string } | undefined;
+  return row?.telegram_payment_charge_id;
 }
 
 export function completePayment(paymentId: number, chargeId: string, providerChargeId?: string): void {

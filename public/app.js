@@ -1,8 +1,3 @@
-/**
- * AstroGuru Mini App
- * Frontend JavaScript for Telegram Mini App
- */
-
 const tg = window.Telegram?.WebApp;
 const API_BASE = '/api';
 
@@ -12,14 +7,13 @@ const ZODIAC_SIGNS = [
 ];
 const ZODIAC_EMOJI = ['♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓'];
 const PLANET_EMOJIS = {
-  sun: '☀️', moon: '🌙', mercury: '☿', venus: '♀',
-  mars: '♂', jupiter: '♃', saturn: '♄', uranus: '⛢',
-  neptune: '♆', pluto: '♇', ascendant: '↑'
+  sun:'☀️',moon:'🌙',mercury:'☿',venus:'♀',mars:'♂',
+  jupiter:'♃',saturn:'♄',uranus:'⛢',neptune:'♆',pluto:'♇',ascendant:'↑'
 };
 const PLANET_NAMES = {
-  sun: 'Солнце', moon: 'Луна', mercury: 'Меркурий', venus: 'Венера',
-  mars: 'Марс', jupiter: 'Юпитер', saturn: 'Сатурн', uranus: 'Уран',
-  neptune: 'Нептун', pluto: 'Плутон', ascendant: 'Асцендент'
+  sun:'Солнце',moon:'Луна',mercury:'Меркурий',venus:'Венера',
+  mars:'Марс',jupiter:'Юпитер',saturn:'Сатурн',uranus:'Уран',
+  neptune:'Нептун',pluto:'Плутон',ascendant:'Асцендент'
 };
 
 class AstroGuruApp {
@@ -27,59 +21,43 @@ class AstroGuruApp {
     this.userData = null;
     this.currentTab = 'horoscope';
     this.initData = tg?.initData || '';
-    // Dev mode: parse ?dev_id= from URL for local testing
     const urlParams = new URLSearchParams(window.location.search);
     this.devId = urlParams.get('dev_id') || '';
+    this.ascendantOffset = 0;
     this.init();
   }
 
   async init() {
-    // Setup Telegram WebApp
     if (tg) {
-      tg.ready();
-      tg.expand();
-      tg.setHeaderColor('#1a0533');
-      tg.setBackgroundColor('#1a1a2e');
+      tg.ready(); tg.expand();
+      tg.setHeaderColor('#1a0533'); tg.setBackgroundColor('#1a1a2e');
     }
-
-    // Apply Telegram theme
     this.applyTheme();
-
-    // Setup navigation
     this.setupNavigation();
-
-    // Populate sign selectors
     this.populateSignSelectors();
-
-    // Load user data
     await this.loadUserData();
-
-    // Show main app
+    this.loadMoonBanner();
+    this.loadLuckyCard();
     setTimeout(() => {
       document.getElementById('loading-screen').classList.remove('active');
       document.getElementById('main-app').classList.add('active');
-    }, 1200);
+    }, 900);
   }
 
   applyTheme() {
     if (!tg?.themeParams) return;
-    const params = tg.themeParams;
-    const root = document.documentElement;
-    if (params.bg_color) root.style.setProperty('--tg-bg', params.bg_color);
-    if (params.secondary_bg_color) root.style.setProperty('--tg-sec-bg', params.secondary_bg_color);
-    if (params.text_color) root.style.setProperty('--tg-text', params.text_color);
-    if (params.hint_color) root.style.setProperty('--tg-hint', params.hint_color);
-    if (params.button_color) root.style.setProperty('--tg-btn', params.button_color);
+    const p = tg.themeParams, r = document.documentElement;
+    if (p.bg_color) r.style.setProperty('--tg-bg', p.bg_color);
+    if (p.secondary_bg_color) r.style.setProperty('--tg-sec-bg', p.secondary_bg_color);
+    if (p.text_color) r.style.setProperty('--tg-text', p.text_color);
+    if (p.hint_color) r.style.setProperty('--tg-hint', p.hint_color);
+    if (p.button_color) r.style.setProperty('--tg-btn', p.button_color);
   }
 
   setupNavigation() {
     document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        this.switchTab(tab);
-      });
+      btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
     });
-
     document.querySelectorAll('.htab').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.htab').forEach(b => b.classList.remove('active'));
@@ -91,29 +69,20 @@ class AstroGuruApp {
 
   switchTab(tab) {
     this.currentTab = tab;
-    document.querySelectorAll('.nav-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tab);
-    });
-    document.querySelectorAll('.tab-content').forEach(t => {
-      t.classList.toggle('active', t.id === `tab-${tab}`);
-    });
-
-    if (tab === 'chart' && this.userData?.isPremium) {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
+    if (tab === 'chart' && (this.userData?.isPremium || this.userData?.hasNatalChart)) {
       this.loadNatalChart();
     }
   }
 
-  async makeRequest(endpoint) {
+  async makeRequest(endpoint, method = 'GET') {
     const headers = { 'Content-Type': 'application/json' };
     if (this.initData) headers['x-init-data'] = this.initData;
-
-    // Dev mode: pass dev_id if running outside Telegram
     const sep = endpoint.includes('?') ? '&' : '?';
     const url = (!this.initData && this.devId)
-      ? `${API_BASE}${endpoint}${sep}dev_id=${this.devId}`
-      : `${API_BASE}${endpoint}`;
-
-    const response = await fetch(url, { headers });
+      ? `${API_BASE}${endpoint}${sep}dev_id=${this.devId}` : `${API_BASE}${endpoint}`;
+    const response = await fetch(url, { method, headers });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${response.status}`);
@@ -125,8 +94,12 @@ class AstroGuruApp {
     try {
       this.userData = await this.makeRequest('/user');
       this.renderUserData();
+      if (this.userData?.chart?.sunSign) {
+        const s1 = document.getElementById('sign1-select');
+        if (s1) s1.value = this.userData.chart.sunSign;
+      }
     } catch (err) {
-      console.warn('Failed to load user data:', err);
+      console.warn('Failed to load user:', err);
       this.renderGuestMode();
     }
   }
@@ -134,115 +107,128 @@ class AstroGuruApp {
   renderUserData() {
     const u = this.userData;
     if (!u) return;
+    const price = u.prices?.subscription || 99;
 
-    // Header sign display
     if (u.chart) {
-      const signIdx = ZODIAC_SIGNS.indexOf(u.chart.sunSign);
+      const idx = ZODIAC_SIGNS.indexOf(u.chart.sunSign);
       document.getElementById('header-sign-name').textContent = u.chart.sunSign || '—';
       document.getElementById('header-sign-detail').textContent =
-        `Луна: ${u.chart.moonSign || '—'} · Аск: ${u.chart.risingSign || '—'}`;
-      document.querySelector('.sign-emoji').textContent = ZODIAC_EMOJI[signIdx] || '✨';
+        `Луна: ${u.chart.moonSign || '—'} · ↑ ${u.chart.risingSign || '—'}`;
+      document.querySelector('.sign-emoji').textContent = ZODIAC_EMOJI[idx] || '✨';
     } else if (u.birthDate) {
       document.getElementById('header-sign-name').textContent = 'Данные загружены';
       document.getElementById('header-sign-detail').textContent = u.birthDate;
     }
 
-    // Premium badge
-    if (u.isPremium) {
-      document.getElementById('premium-badge').style.display = 'flex';
-    }
+    if (u.isPremium) document.getElementById('premium-badge').style.display = 'flex';
 
-    // Profile tab
-    document.getElementById('profile-name').textContent =
-      [u.firstName, u.lastName].filter(Boolean).join(' ');
+    document.getElementById('profile-name').textContent = [u.firstName, u.lastName].filter(Boolean).join(' ');
     document.getElementById('profile-sub-status').textContent =
-      u.isPremium ? '⭐ Premium подписка активна' : '🆓 Бесплатный аккаунт';
+      u.isPremium ? '⭐ Premium активен' : (u.hasNatalChart ? '🌌 Натальная карта разблокирована' : '🆓 Бесплатный аккаунт');
 
-    const signIdx = u.chart ? ZODIAC_SIGNS.indexOf(u.chart.sunSign) : -1;
-    document.getElementById('profile-avatar').textContent =
-      signIdx >= 0 ? ZODIAC_EMOJI[signIdx] : '✨';
-
+    const idx = u.chart ? ZODIAC_SIGNS.indexOf(u.chart.sunSign) : -1;
+    document.getElementById('profile-avatar').textContent = idx >= 0 ? ZODIAC_EMOJI[idx] : '✨';
     document.getElementById('prof-birth-date').textContent = u.birthDate || '—';
     document.getElementById('prof-birth-time').textContent = u.birthTime || 'не указано';
     document.getElementById('prof-birth-city').textContent = u.birthCity || 'не указан';
 
-    // Subscription section
     const subDetails = document.getElementById('sub-details');
     const subBtn = document.getElementById('sub-btn');
+    const cancelBtn = document.getElementById('cancel-sub-btn');
+
     if (u.isPremium) {
       const exp = u.subscriptionExpires
-        ? new Date(u.subscriptionExpires).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
-        : 'бессрочно';
-      subDetails.innerHTML = `✅ Premium активен до: <strong>${exp}</strong>`;
-      subBtn.textContent = '🔄 Продлить подписку';
+        ? new Date(u.subscriptionExpires).toLocaleDateString('ru-RU', { day:'numeric', month:'long', year:'numeric' })
+        : '—';
+      subDetails.innerHTML = `✅ Premium до <strong>${exp}</strong><br>` +
+        (u.autoRenew ? `🔄 Автопродление: ${price} ⭐/мес` : '⏸ Автопродление отключено');
+      subBtn.textContent = `🔄 Продлить — ${price} ⭐`;
+      cancelBtn.style.display = u.autoRenew ? 'block' : 'none';
     } else {
-      subDetails.textContent = 'Получите доступ к персональным гороскопам, натальной карте и совместимости';
+      subDetails.textContent = `Premium ${price} ⭐/мес — AI-гороскоп, натальная карта, транзиты`;
+      subBtn.textContent = `⭐ Premium — ${price} ⭐/мес`;
+      cancelBtn.style.display = 'none';
     }
 
-    // Load initial horoscope
     this.loadHoroscope('daily');
 
-    // Chart tab
-    if (u.isPremium) {
-      document.getElementById('chart-locked').style.display = 'none';
-      document.getElementById('chart-container').style.display = 'block';
-    } else {
-      document.getElementById('chart-locked').style.display = 'block';
-      document.getElementById('chart-container').style.display = 'none';
-      document.getElementById('upgrade-banner').style.display = 'flex';
-    }
+    const hasAccess = u.isPremium || u.hasNatalChart;
+    document.getElementById('chart-locked').style.display = hasAccess ? 'none' : 'block';
+    document.getElementById('chart-container').style.display = hasAccess ? 'block' : 'none';
+    document.getElementById('upgrade-banner').style.display = u.isPremium ? 'none' : 'flex';
   }
 
   renderGuestMode() {
     document.getElementById('header-sign-name').textContent = 'AstroGuru';
-    document.getElementById('header-sign-detail').textContent = 'Настройте данные в боте';
+    document.getElementById('header-sign-detail').textContent = 'Откройте бота → /start';
     document.getElementById('horoscope-content').innerHTML =
-      '<div style="text-align:center;padding:20px;color:var(--tg-hint)">Откройте бота и введите /start для настройки</div>';
+      '<div style="text-align:center;padding:20px;color:var(--tg-hint)">Откройте бота и введите /start</div>';
+  }
+
+  async loadMoonBanner() {
+    try {
+      const moon = await this.makeRequest('/moon');
+      const el = document.getElementById('moon-banner');
+      el.style.display = 'block';
+      el.innerHTML = `${moon.emoji} <strong>${moon.phase}</strong> · Луна в ${moon.sign} (${moon.illumination}%)`;
+    } catch { /* skip */ }
+  }
+
+  async loadLuckyCard() {
+    try {
+      const lucky = await this.makeRequest('/lucky');
+      const el = document.getElementById('lucky-card');
+      el.style.display = 'block';
+      el.innerHTML = `🍀 <strong>Счастливый день</strong> · Числа: ${lucky.numbers.join(', ')} · Цвет: ${lucky.color} · 💎 ${lucky.stone}`;
+    } catch { /* skip */ }
   }
 
   async loadHoroscope(type) {
     const container = document.getElementById('horoscope-content');
-    container.innerHTML = '<div class="skeleton-loading"><div class="skeleton-line"></div><div class="skeleton-line short"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>';
-
+    container.innerHTML = '<div class="skeleton-loading"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>';
+    const endpoints = { daily:'/horoscope/daily', weekly:'/horoscope/weekly', monthly:'/horoscope/monthly' };
     try {
-      const endpoint = type === 'weekly' ? '/horoscope/weekly' : '/horoscope/daily';
-      const data = await this.makeRequest(endpoint);
+      const data = await this.makeRequest(endpoints[type] || endpoints.daily);
       container.innerHTML = this.renderMarkdown(data.content || '');
     } catch (err) {
       if (err.message?.includes('Premium')) {
         container.innerHTML = this.renderPremiumRequired();
       } else {
-        container.innerHTML = `<div style="color:var(--tg-hint);text-align:center;padding:20px">${err.message || 'Ошибка загрузки'}</div>`;
+        container.innerHTML = `<div style="color:var(--tg-hint);text-align:center;padding:20px">${err.message}</div>`;
       }
     }
   }
 
   renderPremiumRequired() {
+    const price = this.userData?.prices?.subscription || 99;
     return `<div style="text-align:center;padding:20px">
       <div style="font-size:48px;margin-bottom:12px">🔒</div>
       <div style="font-size:16px;font-weight:700;color:var(--gold);margin-bottom:8px">Доступно в Premium</div>
-      <div style="color:var(--tg-hint);margin-bottom:20px">Оформите подписку для получения полного прогноза</div>
-      <button class="btn-subscribe" onclick="app.openSubscribe()">⭐ Premium — 49 Stars</button>
+      <button class="btn-subscribe" onclick="app.openSubscribe()">⭐ Premium — ${price} ⭐/мес</button>
     </div>`;
   }
 
   renderMarkdown(text) {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="md-bold">$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em class="md-italic">$1</em>')
-      .replace(/_(.*?)_/g, '<em class="md-italic">$1</em>')
-      .replace(/\n/g, '<br>');
+    return text.replace(/\*\*(.*?)\*\*/g,'<strong class="md-bold">$1</strong>')
+      .replace(/\*(.*?)\*/g,'<em class="md-italic">$1</em>')
+      .replace(/_(.*?)_/g,'<em class="md-italic">$1</em>')
+      .replace(/\n/g,'<br>');
   }
 
   async loadNatalChart() {
-    if (!this.userData?.isPremium) return;
-
+    if (!this.userData?.isPremium && !this.userData?.hasNatalChart) return;
     try {
       const chart = await this.makeRequest('/natal-chart');
+      this.ascendantOffset = chart.ascendant?.longitude || 0;
       this.drawNatalChart(chart);
       this.renderPlanetsList(chart);
+      const interp = document.getElementById('chart-interpretation');
+      if (chart.interpretation) {
+        interp.innerHTML = `<h3 style="margin-bottom:8px;color:var(--accent)">📖 Интерпретация (${chart.monthKey})</h3>` +
+          this.renderMarkdown(chart.interpretation);
+      }
     } catch (err) {
-      console.error('Failed to load natal chart:', err);
+      console.error('Chart error:', err);
     }
   }
 
@@ -250,269 +236,180 @@ class AstroGuruApp {
     const canvas = document.getElementById('natal-chart-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const W = canvas.width;
-    const H = canvas.height;
-    const cx = W / 2;
-    const cy = H / 2;
-    const outerR = W / 2 - 10;
-    const zodiacR = outerR - 8;
-    const zodiacInnerR = zodiacR - 30;
-    const planetR = zodiacInnerR - 20;
+    const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2;
+    const outerR = W/2 - 12, zodiacR = outerR - 6, zodiacInnerR = zodiacR - 32, planetR = zodiacInnerR - 22;
+    const ascOffset = this.ascendantOffset;
 
     ctx.clearRect(0, 0, W, H);
-
-    // Background
-    const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerR);
-    bgGrad.addColorStop(0, '#0f0c29');
-    bgGrad.addColorStop(1, '#1a0533');
+    const bgGrad = ctx.createRadialGradient(cx,cy,0,cx,cy,outerR);
+    bgGrad.addColorStop(0,'#0f0c29'); bgGrad.addColorStop(1,'#1a0533');
     ctx.fillStyle = bgGrad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(cx,cy,outerR,0,Math.PI*2); ctx.fill();
 
-    // Draw zodiac wheel
-    const signColors = [
-      '#ef4444','#22c55e','#eab308','#06b6d4',
-      '#f97316','#84cc16','#8b5cf6','#0ea5e9',
-      '#a855f7','#6366f1','#14b8a6','#ec4899'
-    ];
+    const signColors = ['#ef4444','#22c55e','#eab308','#06b6d4','#f97316','#84cc16',
+      '#8b5cf6','#0ea5e9','#a855f7','#6366f1','#14b8a6','#ec4899'];
 
+    // Zodiac ring — rotated so ascendant is at 9 o'clock (left)
     for (let i = 0; i < 12; i++) {
-      const startAngle = (i * 30 - 90) * Math.PI / 180;
-      const endAngle = ((i + 1) * 30 - 90) * Math.PI / 180;
+      const startAngle = ((i * 30 - ascOffset) - 90) * Math.PI / 180;
+      const endAngle = (((i+1) * 30 - ascOffset) - 90) * Math.PI / 180;
       const midAngle = startAngle + Math.PI / 12;
-
-      // Segment
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, zodiacR, startAngle, endAngle);
-      ctx.closePath();
-      ctx.fillStyle = signColors[i] + '33';
-      ctx.fill();
-      ctx.strokeStyle = signColors[i] + '66';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // Zodiac symbol
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,zodiacR,startAngle,endAngle); ctx.closePath();
+      ctx.fillStyle = signColors[i] + '44'; ctx.fill();
+      ctx.strokeStyle = signColors[i] + '88'; ctx.lineWidth = 1; ctx.stroke();
       ctx.save();
-      ctx.translate(
-        cx + (zodiacInnerR + 18) * Math.cos(midAngle),
-        cy + (zodiacInnerR + 18) * Math.sin(midAngle)
-      );
-      ctx.rotate(midAngle + Math.PI / 2);
-      ctx.fillStyle = signColors[i];
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(ZODIAC_EMOJI[i], 0, 0);
-      ctx.restore();
+      ctx.translate(cx + (zodiacInnerR+20)*Math.cos(midAngle), cy + (zodiacInnerR+20)*Math.sin(midAngle));
+      ctx.rotate(midAngle + Math.PI/2);
+      ctx.fillStyle = signColors[i]; ctx.font = '13px Arial'; ctx.textAlign = 'center';
+      ctx.fillText(ZODIAC_EMOJI[i], 0, 0); ctx.restore();
     }
 
-    // Inner circle
-    ctx.beginPath();
-    ctx.arc(cx, cy, zodiacInnerR, 0, Math.PI * 2);
-    ctx.fillStyle = '#0f0c29ee';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(167,139,250,0.3)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy,zodiacInnerR,0,Math.PI*2);
+    ctx.fillStyle = '#0f0c29ee'; ctx.fill();
+    ctx.strokeStyle = 'rgba(167,139,250,0.4)'; ctx.stroke();
 
-    // House lines
+    // House cusps
     if (chartData.houses) {
-      ctx.strokeStyle = 'rgba(167,139,250,0.2)';
-      ctx.lineWidth = 1;
       for (let i = 0; i < 12; i++) {
-        const angle = (chartData.houses[i] - 90) * Math.PI / 180;
-        const isMainAxis = i % 3 === 0;
-        ctx.strokeStyle = isMainAxis ? 'rgba(167,139,250,0.5)' : 'rgba(167,139,250,0.15)';
-        ctx.lineWidth = isMainAxis ? 1.5 : 0.5;
+        const angle = ((chartData.houses[i] - ascOffset) - 90) * Math.PI / 180;
+        const isAxis = i === 0 || i === 3 || i === 6 || i === 9;
+        ctx.strokeStyle = isAxis ? 'rgba(167,139,250,0.6)' : 'rgba(167,139,250,0.15)';
+        ctx.lineWidth = isAxis ? 1.5 : 0.5;
         ctx.beginPath();
-        ctx.moveTo(cx + 20 * Math.cos(angle), cy + 20 * Math.sin(angle));
-        ctx.lineTo(cx + zodiacInnerR * Math.cos(angle), cy + zodiacInnerR * Math.sin(angle));
+        ctx.moveTo(cx + 18*Math.cos(angle), cy + 18*Math.sin(angle));
+        ctx.lineTo(cx + zodiacInnerR*Math.cos(angle), cy + zodiacInnerR*Math.sin(angle));
         ctx.stroke();
+        if (isAxis) {
+          ctx.fillStyle = 'rgba(167,139,250,0.7)'; ctx.font = '9px Inter';
+          ctx.fillText(String(i+1), cx + (zodiacInnerR-8)*Math.cos(angle), cy + (zodiacInnerR-8)*Math.sin(angle));
+        }
       }
     }
 
     // Planets
-    const planets = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn'];
-    const planetDots = [];
-
+    const planets = ['sun','moon','mercury','venus','mars','jupiter','saturn','uranus','neptune','pluto'];
+    const dots = [];
     for (const planet of planets) {
       if (!chartData[planet]) continue;
       const pos = chartData[planet];
-      const signIdx = ZODIAC_SIGNS.indexOf(pos.sign);
-      const degInSign = pos.degree + pos.minute / 60;
-      const totalDeg = signIdx * 30 + degInSign;
-      const angle = (totalDeg - 90) * Math.PI / 180;
-
-      // Avoid overlap
-      let r = planetR;
-      const existing = planetDots.filter(p => Math.abs(p.angle - angle) < 0.3);
-      r -= existing.length * 14;
-
-      const px = cx + r * Math.cos(angle);
-      const py = cy + r * Math.sin(angle);
-
-      planetDots.push({ angle, px, py });
-
-      // Planet dot
-      ctx.beginPath();
-      ctx.arc(px, py, 5, 0, Math.PI * 2);
-      ctx.fillStyle = signColors[signIdx] || '#a78bfa';
-      ctx.fill();
-
-      // Planet emoji
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(PLANET_EMOJIS[planet] || '●', px, py);
+      const totalDeg = pos.sign ? (ZODIAC_SIGNS.indexOf(pos.sign)*30 + pos.degree + pos.minute/60) : pos.longitude;
+      const angle = ((totalDeg - ascOffset) - 90) * Math.PI / 180;
+      let r = planetR - dots.filter(p => Math.abs(p.angle-angle)<0.25).length * 13;
+      const px = cx + r*Math.cos(angle), py = cy + r*Math.sin(angle);
+      dots.push({angle, px, py});
+      ctx.beginPath(); ctx.arc(px,py,6,0,Math.PI*2);
+      ctx.fillStyle = signColors[ZODIAC_SIGNS.indexOf(pos.sign)] || '#a78bfa'; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.font = '11px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+      ctx.fillText(PLANET_EMOJIS[planet]||'●', px, py+1);
     }
 
-    // Center dot
-    const centerGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20);
-    centerGrad.addColorStop(0, '#a78bfa');
-    centerGrad.addColorStop(1, 'transparent');
-    ctx.beginPath();
-    ctx.arc(cx, cy, 20, 0, Math.PI * 2);
-    ctx.fillStyle = centerGrad;
-    ctx.fill();
-    ctx.font = '16px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    // Ascendant marker at left (9 o'clock)
+    ctx.beginPath(); ctx.arc(cx-planetR+5, cy, 4, 0, Math.PI*2);
+    ctx.fillStyle = '#fbbf24'; ctx.fill();
+    ctx.font = '10px Arial'; ctx.fillStyle = '#fbbf24'; ctx.textAlign = 'left';
+    ctx.fillText('ASC', cx-planetR+12, cy+4);
+
+    ctx.font = '18px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#a78bfa';
     ctx.fillText('✦', cx, cy);
   }
 
   renderPlanetsList(chartData) {
     const container = document.getElementById('planets-list');
     if (!container) return;
-
-    const planets = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'ascendant'];
+    const planets = ['sun','moon','mercury','venus','mars','jupiter','saturn','uranus','neptune','ascendant'];
     container.innerHTML = '';
-
     for (const planet of planets) {
       if (!chartData[planet]) continue;
       const pos = chartData[planet];
       const signIdx = ZODIAC_SIGNS.indexOf(pos.sign);
-      const emoji = ZODIAC_EMOJI[signIdx] || '';
-      const planetEmoji = PLANET_EMOJIS[planet] || '';
-
       const item = document.createElement('div');
       item.className = 'planet-item';
-      item.innerHTML = `
-        <span class="planet-emoji">${planetEmoji}</span>
+      item.innerHTML = `<span class="planet-emoji">${PLANET_EMOJIS[planet]}</span>
         <div class="planet-details">
-          <div class="planet-name">${PLANET_NAMES[planet] || planet}</div>
-          <div class="planet-sign">${emoji} ${pos.sign}</div>
-          <div class="planet-degree">${pos.degree}°${pos.minute}'${pos.retrograde ? ' <span class="retrograde-badge">℞</span>' : ''}</div>
-        </div>
-      `;
+          <div class="planet-name">${PLANET_NAMES[planet]}</div>
+          <div class="planet-sign">${ZODIAC_EMOJI[signIdx]} ${pos.sign}</div>
+          <div class="planet-degree">${pos.degree}°${pos.minute}'${pos.retrograde?' <span class="retrograde-badge">℞</span>':''}</div>
+        </div>`;
       container.appendChild(item);
     }
   }
 
   populateSignSelectors() {
-    const selects = ['sign1-select', 'sign2-select'];
-    for (const id of selects) {
+    ['sign1-select','sign2-select'].forEach(id => {
       const select = document.getElementById(id);
-      if (!select) continue;
-      ZODIAC_SIGNS.forEach((sign, i) => {
+      if (!select) return;
+      ZODIAC_SIGNS.forEach((sign,i) => {
         const opt = document.createElement('option');
-        opt.value = sign;
-        opt.textContent = `${ZODIAC_EMOJI[i]} ${sign}`;
+        opt.value = sign; opt.textContent = `${ZODIAC_EMOJI[i]} ${sign}`;
         select.appendChild(opt);
       });
-    }
-
-    // Pre-fill with user's sign
-    if (this.userData?.chart?.sunSign) {
-      document.getElementById('sign1-select').value = this.userData.chart.sunSign;
-    }
+    });
   }
 
   async checkCompatibility() {
     const sign1 = document.getElementById('sign1-select').value;
     const sign2 = document.getElementById('sign2-select').value;
-
-    if (!sign1 || !sign2) {
-      tg?.showAlert('Выберите оба знака зодиака');
-      return;
-    }
-
+    if (!sign1 || !sign2) { tg?.showAlert('Выберите оба знака'); return; }
     const btn = document.getElementById('compat-btn');
-    btn.disabled = true;
-    btn.textContent = 'Считаю...';
-
+    btn.disabled = true; btn.textContent = 'Считаю...';
     try {
       const result = await this.makeRequest(`/compatibility?sign1=${encodeURIComponent(sign1)}&sign2=${encodeURIComponent(sign2)}`);
       this.renderCompatibilityResult(result);
-    } catch (err) {
-      tg?.showAlert(err.message || 'Ошибка загрузки');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Проверить совместимость';
-    }
+    } catch (err) { tg?.showAlert(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Проверить совместимость'; }
   }
 
   renderCompatibilityResult(result) {
     const container = document.getElementById('compat-result');
-    const s1idx = ZODIAC_SIGNS.indexOf(result.sign1);
-    const s2idx = ZODIAC_SIGNS.indexOf(result.sign2);
-    const e1 = ZODIAC_EMOJI[s1idx] || '';
-    const e2 = ZODIAC_EMOJI[s2idx] || '';
-
-    const areaLabels = { love: '❤️ Любовь', friendship: '🤝 Дружба', work: '💼 Работа', communication: '💬 Общение' };
-
-    let barsHtml = '';
-    for (const [key, label] of Object.entries(areaLabels)) {
-      const val = result.areas?.[key] || 0;
-      barsHtml += `
-        <div class="compat-bar-row">
-          <span class="compat-bar-label">${label}</span>
-          <div class="compat-bar-track">
-            <div class="compat-bar-fill" style="width:${val}%"></div>
-          </div>
-          <span class="compat-bar-value">${val}%</span>
-        </div>`;
+    const e1 = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(result.sign1)] || '';
+    const e2 = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(result.sign2)] || '';
+    const areas = { love:'❤️ Любовь', friendship:'🤝 Дружба', work:'💼 Работа', communication:'💬 Общение' };
+    let bars = '';
+    for (const [k,l] of Object.entries(areas)) {
+      const v = result.areas?.[k] || 0;
+      bars += `<div class="compat-bar-row"><span class="compat-bar-label">${l}</span>
+        <div class="compat-bar-track"><div class="compat-bar-fill" style="width:${v}%"></div></div>
+        <span class="compat-bar-value">${v}%</span></div>`;
     }
-
-    container.innerHTML = `
-      <div class="compat-percentage">
-        <div style="font-size:28px;margin-bottom:8px">${e1} 💕 ${e2}</div>
-        <div class="compat-score">${result.percentage}%</div>
-        <div class="compat-label">совместимость</div>
-      </div>
-      <div class="compat-bar-section">${barsHtml}</div>
-      <p class="compat-description">${result.description || ''}</p>
-    `;
+    container.innerHTML = `<div class="compat-percentage"><div style="font-size:28px">${e1} 💕 ${e2}</div>
+      <div class="compat-score">${result.percentage}%</div><div class="compat-label">совместимость</div></div>
+      <div class="compat-bar-section">${bars}</div>
+      <p class="compat-description">${result.description||''}</p>`;
     container.style.display = 'block';
-    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   openSubscribe() {
-    if (tg) {
-      // Send data to bot to trigger /subscribe flow
-      tg.sendData(JSON.stringify({ action: 'subscribe' }));
-    }
+    if (tg) tg.sendData(JSON.stringify({ action: 'subscribe' }));
+    else alert('Откройте через Telegram бота');
+  }
+
+  buyNatalChart() {
+    if (tg) tg.sendData(JSON.stringify({ action: 'buy_natal_chart' }));
+    else alert('Откройте через Telegram бота');
+  }
+
+  async cancelSubscription() {
+    if (!tg) return;
+    const ok = confirm('Отключить автопродление? Подписка останется до конца оплаченного периода.');
+    if (!ok) return;
+    try {
+      await this.makeRequest('/cancel-subscription', 'POST');
+      tg.showAlert('✅ Автопродление отключено');
+      await this.loadUserData();
+    } catch (err) { tg.showAlert(err.message); }
   }
 
   sendBotCommand(command) {
-    if (tg) {
-      tg.sendData(JSON.stringify({ action: 'command', command }));
-    }
+    if (tg) tg.sendData(JSON.stringify({ action: 'command', command }));
+    else alert(`Выполните ${command} в боте`);
   }
 
   openPrivacy() {
-    const privacyUrl = window.location.origin + '/privacy';
-    if (tg) {
-      tg.openLink(privacyUrl);
-    } else {
-      window.open(privacyUrl, '_blank');
-    }
+    const url = window.location.origin + '/privacy';
+    if (tg) tg.openLink(url); else window.open(url, '_blank');
   }
 }
 
-// Start the app
 let app;
-document.addEventListener('DOMContentLoaded', () => {
-  app = new AstroGuruApp();
-});
+document.addEventListener('DOMContentLoaded', () => { app = new AstroGuruApp(); });

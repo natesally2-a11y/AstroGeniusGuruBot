@@ -1,22 +1,24 @@
 import { Bot } from 'grammy';
-import { processSuccessfulPayment, isSubscriptionActive } from '../../payments/stars';
+import {
+  processSuccessfulPayment, isSubscriptionActive,
+  SUBSCRIPTION_PRICE, NATAL_CHART_PRICE,
+} from '../../payments/stars';
 import { getUserByTelegramId } from '../../database/queries';
 import { logger } from '../../utils/logger';
 
 const MINI_APP_URL = process.env.MINI_APP_URL || 'https://yourdomain.com';
 
 export function registerPaymentHandlers(bot: Bot): void {
-  // Pre-checkout query — must be answered within 10 seconds
   bot.on('pre_checkout_query', async (ctx) => {
-    logger.info(`Pre-checkout query from ${ctx.from.id}`, {
+    logger.info(`Pre-checkout from ${ctx.from.id}`, {
       payload: ctx.preCheckoutQuery.invoice_payload,
       amount: ctx.preCheckoutQuery.total_amount,
     });
 
     try {
       const payload = JSON.parse(ctx.preCheckoutQuery.invoice_payload);
-
-      if (payload.type !== 'subscription') {
+      const validTypes = ['subscription', 'natal_chart'];
+      if (!validTypes.includes(payload.type)) {
         await ctx.answerPreCheckoutQuery(false, { error_message: 'Неверный тип платежа' });
         return;
       }
@@ -34,7 +36,6 @@ export function registerPaymentHandlers(bot: Bot): void {
     }
   });
 
-  // Successful payment
   bot.on('message:successful_payment', async (ctx) => {
     const payment = ctx.message.successful_payment;
     const telegramId = ctx.from!.id;
@@ -45,12 +46,34 @@ export function registerPaymentHandlers(bot: Bot): void {
     });
 
     try {
+      let payloadType = 'subscription';
+      try {
+        payloadType = JSON.parse(payment.invoice_payload).type;
+      } catch { /* default */ }
+
       processSuccessfulPayment(
         telegramId,
         payment.telegram_payment_charge_id,
         payment.provider_payment_charge_id || '',
-        payment.total_amount
+        payment.total_amount,
+        payment.invoice_payload
       );
+
+      if (payloadType === 'natal_chart') {
+        await ctx.reply(
+          `🎉 *Натальная карта разблокирована!*\n\n` +
+          `✅ Оплата: *${payment.total_amount} ⭐*\n` +
+          `🌌 Доступ к полной натальной карте с AI-интерпретацией на 30 дней.\n\n` +
+          `Откройте Mini App → вкладка «Карта»`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [[{ text: '🌟 Открыть Mini App', web_app: { url: MINI_APP_URL } }]],
+            },
+          }
+        );
+        return;
+      }
 
       const user = getUserByTelegramId(telegramId);
       const expiresDate = user?.subscription_expires
@@ -61,15 +84,11 @@ export function registerPaymentHandlers(bot: Bot): void {
 
       await ctx.reply(
         `🎉 *Добро пожаловать в AstroGuru Premium!*\n\n` +
-        `✅ Оплата прошла успешно!\n` +
-        `⭐ Сумма: *${payment.total_amount} Telegram Stars*\n` +
-        `📅 Подписка активна до: *${expiresDate}*\n\n` +
-        `🌟 Теперь вам доступны:\n` +
-        `• Персональный гороскоп на основе натальной карты\n` +
-        `• Анализ планетарных транзитов\n` +
-        `• Совместимость со всеми знаками\n` +
-        `• Недельные и месячные прогнозы\n\n` +
-        `Начните с команды /today ✨`,
+        `✅ Оплата: *${payment.total_amount} ⭐*\n` +
+        `📅 Подписка активна до: *${expiresDate}*\n` +
+        `🔄 Автопродление: *${SUBSCRIPTION_PRICE} ⭐/мес*\n` +
+        `Отменить: /cancel или в профиле Mini App\n\n` +
+        `🌟 Доступно: персональный гороскоп, транзиты, натальная карта, месячный прогноз`,
         {
           parse_mode: 'Markdown',
           reply_markup: {
@@ -81,10 +100,8 @@ export function registerPaymentHandlers(bot: Bot): void {
         }
       );
     } catch (error) {
-      logger.error('Failed to process successful payment', { error, telegramId });
-      await ctx.reply(
-        '❌ Произошла ошибка при активации подписки. Пожалуйста, напишите в поддержку с чеком об оплате.'
-      );
+      logger.error('Failed to process payment', { error, telegramId });
+      await ctx.reply('❌ Ошибка активации. Напишите natesally@yandex.com с чеком об оплате.');
     }
   });
 }

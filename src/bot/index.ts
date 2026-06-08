@@ -6,6 +6,7 @@ import { registerTodayHandler } from './handlers/today';
 import { registerSubscribeHandler } from './handlers/subscribe';
 import { registerSettingsHandler } from './handlers/settings';
 import { registerPaymentHandlers } from './handlers/payment';
+import { registerFeaturesHandler } from './handlers/features';
 
 export function createBot(): Bot {
   const token = process.env.BOT_TOKEN;
@@ -13,78 +14,124 @@ export function createBot(): Bot {
 
   const bot = new Bot(token);
 
-  // Global error handler
   bot.catch((err) => {
-    const ctx = err.ctx;
-    logger.error(`Error handling update ${ctx.update.update_id}`, {
+    logger.error(`Error handling update ${err.ctx.update.update_id}`, {
       error: err.error,
-      userId: ctx.from?.id,
+      userId: err.ctx.from?.id,
     });
   });
 
-  // Middleware
   bot.use(userMiddleware);
 
-  // Register all handlers
   registerStartHandler(bot);
   registerTodayHandler(bot);
   registerSubscribeHandler(bot);
   registerSettingsHandler(bot);
   registerPaymentHandlers(bot);
+  registerFeaturesHandler(bot);
 
-  // Help command
   bot.command('help', async (ctx) => {
+    const price = process.env.SUBSCRIPTION_PRICE || '99';
     await ctx.reply(
       `🌟 *AstroGuru — команды:*\n\n` +
       `/start — Главное меню\n` +
       `/today — Гороскоп на сегодня\n` +
-      `/subscribe — Оформить Premium подписку\n` +
-      `/settings — Изменить данные рождения\n` +
+      `/moon — Фаза луны\n` +
+      `/lucky — Счастливые числа дня\n` +
+      `/transits — Транзиты планет\n` +
+      `/month — Прогноз на месяц (Premium)\n` +
+      `/subscribe — Premium ${price} ⭐/мес\n` +
+      `/buy_chart — Натальная карта разово\n` +
+      `/cancel — Отменить автопродление\n` +
+      `/settings — Данные рождения\n` +
       `/privacy — Политика конфиденциальности\n` +
-      `/help — Это сообщение\n\n` +
-      `💡 Для получения персонального гороскопа укажите дату рождения в /settings`,
+      `/help — Этот список`,
       { parse_mode: 'Markdown' }
     );
   });
 
-  // Mini App data handler
+  // Hidden refund info — not in /help
+  bot.command('refund_support', async (ctx) => {
+    await ctx.reply(
+      `📧 *Возврат средств*\n\n` +
+      `Для запроса возврата напишите на natesally@yandex.com с темой «Возврат AstroGuru».\n` +
+      `Укажите: Telegram ID, дату оплаты, сумму в Stars.\n` +
+      `Рассмотрение — до 5 рабочих дней.`,
+      { parse_mode: 'Markdown' }
+    );
+  });
+
   bot.on('message:web_app_data', async (ctx) => {
     try {
       const data = JSON.parse(ctx.message.web_app_data!.data);
-      if (data.action === 'subscribe') {
+      const { getUserByTelegramId } = await import('../database/queries');
+      const user = getUserByTelegramId(ctx.from!.id);
+
+      if (data.action === 'subscribe' && user) {
         const { sendSubscriptionInvoice } = await import('../payments/stars');
-        const { getUserByTelegramId } = await import('../database/queries');
-        const user = getUserByTelegramId(ctx.from!.id);
-        if (user) await sendSubscriptionInvoice(bot, ctx.chat!.id, user.id);
+        await sendSubscriptionInvoice(bot, ctx.chat!.id, user.id);
+        return;
+      }
+
+      if (data.action === 'buy_natal_chart' && user) {
+        const { sendNatalChartInvoice } = await import('../payments/stars');
+        await sendNatalChartInvoice(bot, ctx.chat!.id, user.id);
+        return;
+      }
+
+      if (data.action === 'cancel_subscription' && user) {
+        const { cancelSubscription } = await import('../payments/stars');
+        cancelSubscription(ctx.from!.id);
+        await ctx.reply('✅ Автопродление отключено. Подписка действует до конца оплаченного периода.');
+        return;
+      }
+
+      if (data.action === 'command' && data.command) {
+        const cmd = data.command.replace('/', '');
+        const handlers: Record<string, () => Promise<void>> = {
+          today: async () => { await ctx.reply('🔮 Отправляю гороскоп...'); },
+          settings: async () => { await ctx.reply('⚙️ Введите /settings для изменения данных рождения'); },
+        };
+        if (handlers[cmd]) {
+          await handlers[cmd]();
+        } else {
+          await ctx.reply(`Выполните команду ${data.command} в чате с ботом 👇`);
+        }
+        // Trigger actual command by simulating - user can tap
+        if (cmd === 'today') {
+          const { generateDailyHoroscope } = await import('../astrology/horoscope');
+          if (user?.birth_date) {
+            const text = await generateDailyHoroscope(user, new Date());
+            await ctx.reply(text, { parse_mode: 'Markdown' });
+          }
+        }
+        if (cmd === 'settings') {
+          await ctx.reply('⚙️ Введите дату рождения в формате ДД.ММ.ГГГГ', {
+            reply_markup: { inline_keyboard: [[{ text: '📅 Указать дату', callback_data: 'edit_birth_date' }]] },
+          });
+        }
       }
     } catch (e) {
-      logger.error('web_app_data parse error', { e });
+      logger.error('web_app_data error', { e });
     }
   });
 
-  // App store verification command
   bot.command('appss_verify', async (ctx) => {
     await ctx.reply('appss_0a3e35');
   });
 
-  // Privacy policy command
   bot.command('privacy', async (ctx) => {
     const webhookUrl = process.env.WEBHOOK_URL || 'https://astroguru-production.up.railway.app';
     await ctx.reply(
-      `📄 *Политика конфиденциальности AstroGuru*\n\n` +
-      `Ознакомьтесь с полным текстом политики в отношении обработки персональных данных:\n\n` +
-      `🔗 ${webhookUrl}/privacy\n\n` +
-      `По вопросам обработки персональных данных: natesally@yandex.com`,
+      `📄 *Политика конфиденциальности*\n\n🔗 ${webhookUrl}/privacy\n\n` +
+      `📧 natesally@yandex.com`,
       { parse_mode: 'Markdown' }
     );
   });
 
-  // Unknown command fallback
   bot.on('message:text', async (ctx) => {
     if (ctx.message.text?.startsWith('/')) {
-      await ctx.reply(
-        '❓ Неизвестная команда. Используйте /help для просмотра доступных команд.'
-      );
+      await ctx.reply('❓ Неизвестная команда. /help');
     }
   });
 

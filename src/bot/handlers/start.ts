@@ -12,9 +12,11 @@ export function registerStartHandler(bot: Bot): void {
 
     logger.info(`/start from ${telegramId}`);
 
+    const price = process.env.SUBSCRIPTION_PRICE || '99';
     const keyboard = new InlineKeyboard()
       .webApp('🌟 Открыть AstroGuru', MINI_APP_URL).row()
-      .text('🔮 Мой гороскоп', 'horoscope_today').text('⭐ Premium', 'subscribe_info').row()
+      .text('🔮 Гороскоп', 'horoscope_today').text('🌙 Луна', 'moon_phase').row()
+      .text('⭐ Premium', 'subscribe_info').text('🍀 Удача', 'lucky_day').row()
       .text('📊 Натальная карта', 'natal_chart').text('💑 Совместимость', 'compatibility').row()
       .text('⚙️ Настройки', 'settings_menu');
 
@@ -48,14 +50,14 @@ export function registerStartHandler(bot: Bot): void {
   });
 
 
-  bot.callbackQuery('horoscope_today', async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await ctx.reply('Используйте команду /today для получения гороскопа');
+  bot.callbackQuery('lucky_day', async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.reply('🍀 Введите /lucky для счастливых чисел дня');
   });
 
   bot.callbackQuery('subscribe_info', async (ctx) => {
-    await ctx.answerCallbackQuery();
-    const price = process.env.SUBSCRIPTION_PRICE || '49';
+    await ctx.answerCallbackQuery().catch(() => {});
+    const price = process.env.SUBSCRIPTION_PRICE || '99';
     const keyboard = new InlineKeyboard()
       .text(`⭐ Подписаться за ${price} Stars`, 'confirm_subscribe').row()
       .text('❓ Что входит в Premium?', 'premium_features');
