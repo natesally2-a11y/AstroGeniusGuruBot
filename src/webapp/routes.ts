@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
+import { Api } from 'grammy';
 import { validateInitData } from '../utils/initData';
 import {
   getUserByTelegramId, getNatalChart, getPaymentHistory,
   getHoroscope, saveHoroscope, getChartInterpretation, saveChartInterpretation,
 } from '../database/queries';
 import {
-  calculateNatalChartForUser, ZODIAC_SIGNS, ZODIAC_EMOJI, calculateAspects,
+  calculateNatalChartForUser, ZODIAC_SIGNS, ZODIAC_EMOJI, calculateAspects, calculateTransits,
 } from '../astrology/engine';
 import { calculateCompatibility } from '../astrology/compatibility';
 import { generateDailyHoroscope, generateWeeklyHoroscope, generateMonthlyHoroscope } from '../astrology/horoscope';
@@ -14,13 +15,16 @@ import { getMoonPhase, getLuckyDay } from '../astrology/features';
 import { getLocalDateKey, getCurrentMonthKey } from '../astrology/timezone';
 import {
   isSubscriptionActive, hasNatalChartAccess, cancelSubscription,
+  sendSubscriptionInvoice, sendNatalChartInvoice,
   SUBSCRIPTION_PRICE, NATAL_CHART_PRICE,
 } from '../payments/stars';
+import { isAdmin } from '../config/admin';
 import { logger } from '../utils/logger';
 
 const router = Router();
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const IS_DEV = process.env.NODE_ENV !== 'production';
+const botApi = BOT_TOKEN ? new Api(BOT_TOKEN) : null;
 
 function requireAuth(req: Request, res: Response, next: () => void): void {
   const initData = req.headers['x-init-data'] as string || req.query.initData as string;
@@ -58,6 +62,7 @@ router.get('/user', requireAuth, (req: Request, res: Response) => {
   const chart = getNatalChart(user.id);
   const isPremium = isSubscriptionActive(user);
   const hasChart = hasNatalChartAccess(user);
+  const userIsAdmin = isAdmin(user);
 
   res.json({
     id: user.id,
@@ -69,7 +74,9 @@ router.get('/user', requireAuth, (req: Request, res: Response) => {
     birthCity: user.birth_city,
     timezone: user.timezone,
     isPremium,
+    isAdmin: userIsAdmin,
     hasNatalChart: hasChart,
+    hasBirthData: !!user.birth_date,
     autoRenew: user.auto_renew !== 0,
     subscriptionExpires: user.subscription_expires,
     natalChartExpires: user.natal_chart_unlocked_until,
@@ -93,7 +100,13 @@ router.get('/user', requireAuth, (req: Request, res: Response) => {
 
 router.get('/horoscope/daily', requireAuth, async (req: Request, res: Response) => {
   const user = getUserByTelegramId((req as any).telegramUser.id);
-  if (!user?.birth_date) { res.status(400).json({ error: 'Birth data not set' }); return; }
+  if (!user?.birth_date) {
+    res.status(400).json({
+      error: 'Укажите дату рождения в боте: /settings',
+      needsBirthData: true,
+    });
+    return;
+  }
 
   const dateKey = getLocalDateKey(user.timezone || 'Europe/Moscow');
   const cached = getHoroscope(user.id, dateKey);
@@ -192,8 +205,57 @@ router.get('/compatibility', requireAuth, (req: Request, res: Response) => {
 
 router.post('/cancel-subscription', requireAuth, (req: Request, res: Response) => {
   const tgUser = (req as any).telegramUser;
+  const user = getUserByTelegramId(tgUser.id);
+  if (user && isAdmin(user)) {
+    res.status(400).json({ error: 'Админ-подписка бессрочная' });
+    return;
+  }
   cancelSubscription(tgUser.id);
   res.json({ success: true, message: 'Автопродление отключено' });
+});
+
+router.post('/invoice/subscribe', requireAuth, async (req: Request, res: Response) => {
+  const tgUser = (req as any).telegramUser;
+  const user = getUserByTelegramId(tgUser.id);
+  if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+  if (!botApi) { res.status(500).json({ error: 'Bot not configured' }); return; }
+  try {
+    await sendSubscriptionInvoice(botApi, tgUser.id, user.id);
+    res.json({ success: true, message: 'Счёт отправлен в чат бота' });
+  } catch (error) {
+    logger.error('Invoice subscribe error', { error });
+    res.status(500).json({ error: 'Не удалось отправить счёт. Напишите /subscribe в боте.' });
+  }
+});
+
+router.post('/invoice/natal-chart', requireAuth, async (req: Request, res: Response) => {
+  const tgUser = (req as any).telegramUser;
+  const user = getUserByTelegramId(tgUser.id);
+  if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+  if (!user.birth_date) { res.status(400).json({ error: 'Сначала укажите дату рождения: /settings' }); return; }
+  if (!botApi) { res.status(500).json({ error: 'Bot not configured' }); return; }
+  try {
+    await sendNatalChartInvoice(botApi, tgUser.id, user.id);
+    res.json({ success: true, message: 'Счёт отправлен в чат бота' });
+  } catch (error) {
+    logger.error('Invoice natal-chart error', { error });
+    res.status(500).json({ error: 'Не удалось отправить счёт. Напишите /buy_chart в боте.' });
+  }
+});
+
+router.get('/transits', requireAuth, (req: Request, res: Response) => {
+  const user = getUserByTelegramId((req as any).telegramUser.id);
+  if (!user?.birth_date) { res.status(400).json({ error: 'Укажите дату рождения' }); return; }
+  const chart = calculateNatalChartForUser(
+    user.birth_date, user.birth_time, user.birth_lat || 0, user.birth_lon || 0, user.timezone
+  );
+  const today = new Date();
+  const transit = calculateNatalChartForUser(
+    `${String(today.getDate()).padStart(2,'0')}.${String(today.getMonth()+1).padStart(2,'0')}.${today.getFullYear()}`,
+    '12:00', 0, 0, 'UTC'
+  );
+  const transits = calculateTransits(chart, transit).slice(0, 6);
+  res.json({ transits });
 });
 
 router.get('/payment-history', requireAuth, (req: Request, res: Response) => {

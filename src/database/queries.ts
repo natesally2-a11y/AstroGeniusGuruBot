@@ -141,13 +141,39 @@ export function unlockNatalChart(telegramId: number, until?: string): void {
   `).run({ until: until || null, telegram_id: telegramId });
 }
 
-export function downgradeExpiredSubscriptions(): number {
+export function downgradeExpiredSubscriptions(adminTelegramIds: number[] = []): number {
+  // Only downgrade when user explicitly cancelled (auto_renew = 0).
+  // NULL = legacy subscriber, keep status until they cancel manually.
+  // Never touch lifetime premium (subscription_expires IS NULL) or admins.
+  if (adminTelegramIds.length > 0) {
+    const placeholders = adminTelegramIds.map(() => '?').join(',');
+    const result = db.prepare(`
+      UPDATE users SET subscription_status = 'free'
+      WHERE subscription_status = 'premium'
+      AND subscription_expires IS NOT NULL
+      AND subscription_expires <= datetime('now')
+      AND auto_renew = 0
+      AND telegram_id NOT IN (${placeholders})
+    `).run(...adminTelegramIds);
+    return result.changes;
+  }
   const result = db.prepare(`
     UPDATE users SET subscription_status = 'free'
     WHERE subscription_status = 'premium'
     AND subscription_expires IS NOT NULL
     AND subscription_expires <= datetime('now')
-    AND (auto_renew = 0 OR auto_renew IS NULL)
+    AND auto_renew = 0
+  `).run();
+  return result.changes;
+}
+
+/** Fix legacy premium users after migrations — set auto_renew=1 if still active */
+export function migrateLegacyPremiumUsers(): number {
+  const result = db.prepare(`
+    UPDATE users SET auto_renew = 1
+    WHERE subscription_status = 'premium'
+    AND auto_renew IS NULL
+    AND (subscription_expires IS NULL OR subscription_expires > datetime('now'))
   `).run();
   return result.changes;
 }

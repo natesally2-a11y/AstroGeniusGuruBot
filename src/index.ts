@@ -20,6 +20,19 @@ async function main(): Promise<void> {
   // Initialize database
   initializeDatabase();
 
+  // Migrate legacy subscriptions & grant admin lifetime premium
+  const { migrateLegacyPremiumUsers } = await import('./database/queries');
+  const { grantLifetimePremium } = await import('./payments/stars');
+  const { isAdminTelegramId } = await import('./config/admin');
+  const migrated = migrateLegacyPremiumUsers();
+  if (migrated > 0) logger.info(`Migrated ${migrated} legacy premium users`);
+  const adminIds = (process.env.ADMIN_TELEGRAM_IDS || '6004279903')
+    .split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
+  for (const adminId of adminIds) {
+    grantLifetimePremium(adminId);
+    logger.info(`Admin lifetime premium ensured for ${adminId}`);
+  }
+
   // Create bot
   const bot = createBot();
 

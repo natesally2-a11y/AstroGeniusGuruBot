@@ -1,5 +1,6 @@
 const tg = window.Telegram?.WebApp;
 const API_BASE = '/api';
+const BOT_USERNAME = 'AstroGeniusGuruBot';
 
 const ZODIAC_SIGNS = [
   'Овен','Телец','Близнецы','Рак','Лев','Дева',
@@ -109,6 +110,8 @@ class AstroGuruApp {
     if (!u) return;
     const price = u.prices?.subscription || 99;
 
+    document.getElementById('header-sign-name').textContent = u.firstName || 'AstroGuru';
+
     if (u.chart) {
       const idx = ZODIAC_SIGNS.indexOf(u.chart.sunSign);
       document.getElementById('header-sign-name').textContent = u.chart.sunSign || '—';
@@ -123,8 +126,11 @@ class AstroGuruApp {
     if (u.isPremium) document.getElementById('premium-badge').style.display = 'flex';
 
     document.getElementById('profile-name').textContent = [u.firstName, u.lastName].filter(Boolean).join(' ');
-    document.getElementById('profile-sub-status').textContent =
-      u.isPremium ? '⭐ Premium активен' : (u.hasNatalChart ? '🌌 Натальная карта разблокирована' : '🆓 Бесплатный аккаунт');
+    let statusText = '🆓 Бесплатный аккаунт';
+    if (u.isAdmin) statusText = '👑 Админ · Premium бессрочно';
+    else if (u.isPremium) statusText = '⭐ Premium активен';
+    else if (u.hasNatalChart) statusText = '🌌 Натальная карта разблокирована';
+    document.getElementById('profile-sub-status').textContent = statusText;
 
     const idx = u.chart ? ZODIAC_SIGNS.indexOf(u.chart.sunSign) : -1;
     document.getElementById('profile-avatar').textContent = idx >= 0 ? ZODIAC_EMOJI[idx] : '✨';
@@ -136,15 +142,21 @@ class AstroGuruApp {
     const subBtn = document.getElementById('sub-btn');
     const cancelBtn = document.getElementById('cancel-sub-btn');
 
-    if (u.isPremium) {
+    if (u.isAdmin) {
+      subDetails.innerHTML = '👑 <strong>Бессрочный Premium</strong> (админ)';
+      subBtn.style.display = 'none';
+      cancelBtn.style.display = 'none';
+    } else if (u.isPremium) {
       const exp = u.subscriptionExpires
         ? new Date(u.subscriptionExpires).toLocaleDateString('ru-RU', { day:'numeric', month:'long', year:'numeric' })
-        : '—';
+        : 'бессрочно';
       subDetails.innerHTML = `✅ Premium до <strong>${exp}</strong><br>` +
         (u.autoRenew ? `🔄 Автопродление: ${price} ⭐/мес` : '⏸ Автопродление отключено');
       subBtn.textContent = `🔄 Продлить — ${price} ⭐`;
+      subBtn.style.display = 'block';
       cancelBtn.style.display = u.autoRenew ? 'block' : 'none';
     } else {
+      subBtn.style.display = 'block';
       subDetails.textContent = `Premium ${price} ⭐/мес — AI-гороскоп, натальная карта, транзиты`;
       subBtn.textContent = `⭐ Premium — ${price} ⭐/мес`;
       cancelBtn.style.display = 'none';
@@ -193,6 +205,13 @@ class AstroGuruApp {
     } catch (err) {
       if (err.message?.includes('Premium')) {
         container.innerHTML = this.renderPremiumRequired();
+      } else if (err.message?.includes('дату рождения') || err.message?.includes('Birth')) {
+        container.innerHTML = `<div style="text-align:center;padding:24px">
+          <div style="font-size:40px;margin-bottom:12px">📅</div>
+          <div style="font-weight:600;margin-bottom:8px">Укажите дату рождения</div>
+          <div style="color:var(--tg-hint);margin-bottom:16px">Для персонального гороскопа нужны ваши данные</div>
+          <button class="btn-primary" onclick="app.openSettings()">⚙️ Указать в боте</button>
+        </div>`;
       } else {
         container.innerHTML = `<div style="color:var(--tg-hint);text-align:center;padding:20px">${err.message}</div>`;
       }
@@ -379,14 +398,29 @@ class AstroGuruApp {
     container.style.display = 'block';
   }
 
-  openSubscribe() {
-    if (tg) tg.sendData(JSON.stringify({ action: 'subscribe' }));
-    else alert('Откройте через Telegram бота');
+  async openSubscribe() {
+    if (!tg) { alert('Откройте через Telegram'); return; }
+    try {
+      tg.MainButton?.showProgress?.();
+      const r = await this.makeRequest('/invoice/subscribe', 'POST');
+      tg.showAlert(r.message || 'Счёт отправлен! Проверьте чат с ботом.');
+      tg.close();
+    } catch (err) {
+      tg.showAlert(err.message || 'Ошибка. Попробуйте /subscribe в боте.');
+    } finally {
+      tg.MainButton?.hideProgress?.();
+    }
   }
 
-  buyNatalChart() {
-    if (tg) tg.sendData(JSON.stringify({ action: 'buy_natal_chart' }));
-    else alert('Откройте через Telegram бота');
+  async buyNatalChart() {
+    if (!tg) { alert('Откройте через Telegram'); return; }
+    try {
+      const r = await this.makeRequest('/invoice/natal-chart', 'POST');
+      tg.showAlert(r.message || 'Счёт отправлен! Проверьте чат с ботом.');
+      tg.close();
+    } catch (err) {
+      tg.showAlert(err.message || 'Ошибка. Попробуйте /buy_chart в боте.');
+    }
   }
 
   async cancelSubscription() {
@@ -400,9 +434,48 @@ class AstroGuruApp {
     } catch (err) { tg.showAlert(err.message); }
   }
 
-  sendBotCommand(command) {
-    if (tg) tg.sendData(JSON.stringify({ action: 'command', command }));
-    else alert(`Выполните ${command} в боте`);
+  openSettings() {
+    const url = `https://t.me/${BOT_USERNAME}?start=settings`;
+    if (tg) tg.openTelegramLink(url);
+    else window.open(url, '_blank');
+  }
+
+  async sendBotCommand(command) {
+    const cmd = command.replace('/', '');
+    switch (cmd) {
+      case 'today':
+        this.switchTab('horoscope');
+        document.querySelectorAll('.htab').forEach(b => b.classList.toggle('active', b.dataset.htype === 'daily'));
+        await this.loadHoroscope('daily');
+        break;
+      case 'settings':
+        this.openSettings();
+        break;
+      case 'moon': {
+        const moon = await this.makeRequest('/moon');
+        if (tg) tg.showAlert(`${moon.emoji} ${moon.phase}\nЛуна в ${moon.sign}\n\n${moon.advice}`);
+        break;
+      }
+      case 'lucky':
+        await this.loadLuckyCard();
+        document.getElementById('lucky-card')?.scrollIntoView({ behavior: 'smooth' });
+        break;
+      case 'transits': {
+        try {
+          const data = await this.makeRequest('/transits');
+          const lines = data.transits.map(t =>
+            `${t.energy === 'harmonious' ? '✅' : t.energy === 'challenging' ? '⚠️' : '➡️'} ${t.transitPlanet} → ${t.natalPlanet}: ${t.aspectType}`
+          ).join('\n');
+          if (tg) tg.showAlert(lines || 'Сегодня спокойный день ✨');
+        } catch (err) {
+          if (err.message?.includes('дату')) this.openSettings();
+          else tg?.showAlert(err.message);
+        }
+        break;
+      }
+      default:
+        if (tg) tg.openTelegramLink(`https://t.me/${BOT_USERNAME}?start=${cmd}`);
+    }
   }
 
   openPrivacy() {

@@ -1,9 +1,10 @@
-import { Bot } from 'grammy';
+import { Bot, Api } from 'grammy';
 import { logger } from '../utils/logger';
 import {
   getUserByTelegramId, updateSubscription, createPayment, completePayment,
   unlockNatalChart, setAutoRenew, User,
 } from '../database/queries';
+import { isAdmin } from '../config/admin';
 
 export const SUBSCRIPTION_PRICE = parseInt(process.env.SUBSCRIPTION_PRICE || '99', 10);
 export const SUBSCRIPTION_DAYS = parseInt(process.env.SUBSCRIPTION_DAYS || '30', 10);
@@ -40,12 +41,12 @@ export function buildNatalChartInvoice(userId: number): InvoiceParams {
   };
 }
 
-async function sendInvoice(bot: Bot, chatId: number, invoice: InvoiceParams): Promise<void> {
+async function sendInvoice(api: Api, chatId: number, invoice: InvoiceParams): Promise<void> {
   const options: Record<string, unknown> = {};
   if (invoice.subscriptionPeriod) {
     options.subscription_period = invoice.subscriptionPeriod;
   }
-  await bot.api.sendInvoice(
+  await api.sendInvoice(
     chatId,
     invoice.title,
     invoice.description,
@@ -56,9 +57,10 @@ async function sendInvoice(bot: Bot, chatId: number, invoice: InvoiceParams): Pr
   );
 }
 
-export async function sendSubscriptionInvoice(bot: Bot, chatId: number, userId: number): Promise<void> {
+export async function sendSubscriptionInvoice(botOrApi: Bot | Api, chatId: number, userId: number): Promise<void> {
+  const api = 'api' in botOrApi ? botOrApi.api : botOrApi;
   try {
-    await sendInvoice(bot, chatId, buildSubscriptionInvoice(userId));
+    await sendInvoice(api, chatId, buildSubscriptionInvoice(userId));
     logger.info(`Subscription invoice sent to user ${userId}`);
   } catch (error) {
     logger.error('Failed to send subscription invoice', { error, userId });
@@ -66,14 +68,22 @@ export async function sendSubscriptionInvoice(bot: Bot, chatId: number, userId: 
   }
 }
 
-export async function sendNatalChartInvoice(bot: Bot, chatId: number, userId: number): Promise<void> {
+export async function sendNatalChartInvoice(botOrApi: Bot | Api, chatId: number, userId: number): Promise<void> {
+  const api = 'api' in botOrApi ? botOrApi.api : botOrApi;
   try {
-    await sendInvoice(bot, chatId, buildNatalChartInvoice(userId));
+    await sendInvoice(api, chatId, buildNatalChartInvoice(userId));
     logger.info(`Natal chart invoice sent to user ${userId}`);
   } catch (error) {
     logger.error('Failed to send natal chart invoice', { error, userId });
     throw error;
   }
+}
+
+/** Grant lifetime premium — used for admins on startup */
+export function grantLifetimePremium(telegramId: number): void {
+  updateSubscription(telegramId, 'premium', undefined);
+  setAutoRenew(telegramId, false);
+  logger.info(`Lifetime premium granted to ${telegramId}`);
 }
 
 export function processSuccessfulPayment(
@@ -130,13 +140,15 @@ export function processSuccessfulPayment(
   logger.info(`Premium activated for user ${telegramId} until ${expiresAt.toISOString()}`);
 }
 
-export function isSubscriptionActive(user: { subscription_status: string; subscription_expires?: string }): boolean {
+export function isSubscriptionActive(user: Pick<User, 'telegram_id' | 'username' | 'subscription_status' | 'subscription_expires'>): boolean {
+  if (isAdmin(user)) return true;
   if (user.subscription_status !== 'premium') return false;
   if (!user.subscription_expires) return true;
   return new Date(user.subscription_expires) > new Date();
 }
 
 export function hasNatalChartAccess(user: User): boolean {
+  if (isAdmin(user)) return true;
   if (isSubscriptionActive(user)) return true;
   if (!user.natal_chart_unlocked) return false;
   if (!user.natal_chart_unlocked_until) return true;

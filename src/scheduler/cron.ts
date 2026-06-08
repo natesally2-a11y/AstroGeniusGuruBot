@@ -54,7 +54,9 @@ async function sendDailyHoroscopeToUser(
 }
 
 async function sendDailyHoroscopes(bot: Bot): Promise<void> {
-  downgradeExpiredSubscriptions();
+  downgradeExpiredSubscriptions(
+    (process.env.ADMIN_TELEGRAM_IDS || '6004279903').split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean)
+  );
   const users = getAllUsersWithBirthData();
   let sent = 0;
   let failed = 0;
