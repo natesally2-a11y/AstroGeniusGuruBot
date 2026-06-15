@@ -46,13 +46,17 @@ export async function editMarkdownSafe(
       parse_mode: 'Markdown',
       ...options,
     });
+    return;
   } catch (error) {
     logger.warn('Markdown edit failed, trying plain text', { error, userId: ctx.from?.id });
-    try {
-      await ctx.api.editMessageText(ctx.chat!.id, messageId, stripMarkdown(first), options);
-    } catch (editErr) {
-      logger.warn('Plain edit failed, sending new message', { editErr });
-      await replyMarkdownSafe(ctx, text, options);
-    }
   }
+
+  try {
+    await ctx.api.editMessageText(ctx.chat!.id, messageId, stripMarkdown(first), options);
+    return;
+  } catch (editErr) {
+    logger.warn('Plain edit failed, sending new message', { editErr });
+  }
+
+  await replyMarkdownSafe(ctx, text, options);
 }

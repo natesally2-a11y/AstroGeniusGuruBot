@@ -18,7 +18,7 @@ import { DateTime } from 'luxon';
 import { prepareHoroscopeText } from '../bot/helpers/telegramText';
 
 /** Shared AI limits — same for free and premium; premium only removes request quota. */
-const AI_TIMEOUT_MS = 60_000;
+const AI_TIMEOUT_MS = 45_000;
 const AI_TOKENS = 520;
 
 function getUserSunSign(user: User): ZodiacSign {

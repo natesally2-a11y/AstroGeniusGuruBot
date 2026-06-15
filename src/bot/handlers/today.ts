@@ -1,10 +1,11 @@
-import { Bot, Context } from 'grammy';
+import { Bot, Context, InlineKeyboard } from 'grammy';
 import { getUserByTelegramId, saveHoroscope, getHoroscope } from '../../database/queries';
 import { generateDailyHoroscope, generateWeeklyHoroscope } from '../../astrology/horoscope';
 import { isSubscriptionActive } from '../../payments/stars';
 import { getHoroscopeCacheKey, parseLangFromHoroscopeKey } from '../../astrology/timezone';
 import { editMarkdownSafe, replyMarkdownSafe } from '../helpers/reply';
 import { checkAiQuota, trackAiGeneration } from '../../payments/usageLimits';
+import { isAiEnabled } from '../../ai/llm';
 import {
   birthDatePromptKeyboard, horoscopeFollowUpKeyboardForLang,
   premiumGateKeyboard, weeklyHoroscopeKeyboard,
@@ -13,18 +14,39 @@ import { resolveUserLang, tUser } from '../../i18n';
 import { logger } from '../../utils/logger';
 
 function isBrokenHoroscopeCache(content: string): boolean {
-  if (content.length < 200) return true;
+  if (content.length < 80) return true;
   if (/###/.test(content)) return true;
   if (/\*\*/.test(content)) return true;
-  // Old premium-format cache — regenerate with unified free-style flow
-  if (/Персональный гороскоп|Personal horoscope|Horóscopo personal|أبراج شخصية/.test(content)) return true;
-  if (/Энергетика дня|Day energy|energía del día/i.test(content)) return true;
   return false;
 }
 
 function resolveHoroscopeLang(ctx: Context, user: NonNullable<ReturnType<typeof getUserByTelegramId>>, dateKey: string) {
   return parseLangFromHoroscopeKey(dateKey)
     || resolveUserLang(user, ctx.from?.language_code);
+}
+
+async function upgradeDailyHoroscopeWithAi(
+  ctx: Context,
+  messageId: number,
+  user: NonNullable<ReturnType<typeof getUserByTelegramId>>,
+  dateKey: string,
+  keyboard: InlineKeyboard
+): Promise<void> {
+  const quota = checkAiQuota(user);
+  if (!quota.ok || !isAiEnabled()) return;
+
+  try {
+    const aiText = await generateDailyHoroscope(user, true);
+    if (aiText.length < 120) return;
+
+    trackAiGeneration(user, 'daily');
+    saveHoroscope({ user_id: user.id, date: dateKey, content: aiText });
+    await editMarkdownSafe(ctx, messageId, aiText, { reply_markup: keyboard });
+  } catch (error) {
+    logger.warn('AI horoscope upgrade failed, template already delivered', {
+      error, userId: user.telegram_id,
+    });
+  }
 }
 
 export async function sendTodayHoroscope(ctx: Context): Promise<void> {
@@ -51,24 +73,15 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
   );
 
   try {
-    const quota = checkAiQuota(user);
-    if (!quota.ok) {
-      await ctx.api.editMessageText(
-        ctx.chat!.id,
-        loadingMsg.message_id,
-        quota.message || tUser(user, 'today.error'),
-        { parse_mode: 'Markdown' }
-      ).catch(() => {});
-      return;
+    const templateText = await generateDailyHoroscope(user, false);
+    if (templateText.length < 80) {
+      throw new Error('Horoscope template too short');
     }
 
-    const horoscopeText = await generateDailyHoroscope(user);
-    if (horoscopeText.length < 120) {
-      throw new Error('Horoscope too short');
-    }
-    trackAiGeneration(user, 'daily');
-    saveHoroscope({ user_id: user.id, date: dateKey, content: horoscopeText });
-    await editMarkdownSafe(ctx, loadingMsg.message_id, horoscopeText, { reply_markup: keyboard });
+    saveHoroscope({ user_id: user.id, date: dateKey, content: templateText });
+    await editMarkdownSafe(ctx, loadingMsg.message_id, templateText, { reply_markup: keyboard });
+
+    void upgradeDailyHoroscopeWithAi(ctx, loadingMsg.message_id, user, dateKey, keyboard);
   } catch (error) {
     logger.error('Failed to generate daily horoscope', { error, userId: ctx.from?.id });
     await ctx.api.editMessageText(
@@ -133,11 +146,17 @@ export function registerTodayHandler(bot: Bot): void {
         ).catch(() => {});
         return;
       }
-      const weekly = await generateWeeklyHoroscope(user);
-      trackAiGeneration(user, 'weekly');
+      const weekly = await generateWeeklyHoroscope(user, false);
       await editMarkdownSafe(ctx, loadingMsg.message_id, weekly, {
         reply_markup: weeklyHoroscopeKeyboard(user),
       });
+      void generateWeeklyHoroscope(user, true).then(async (aiWeekly) => {
+        if (aiWeekly.length < 120) return;
+        trackAiGeneration(user, 'weekly');
+        await editMarkdownSafe(ctx, loadingMsg.message_id, aiWeekly, {
+          reply_markup: weeklyHoroscopeKeyboard(user),
+        });
+      }).catch((error) => logger.warn('Weekly AI upgrade failed', { error }));
     } catch (error) {
       logger.error('Failed to generate weekly horoscope', { error });
       await ctx.api.editMessageText(ctx.chat!.id, loadingMsg.message_id, tUser(user, 'today.weekly_error')).catch(() => {});

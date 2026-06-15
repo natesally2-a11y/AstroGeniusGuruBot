@@ -29,9 +29,14 @@ async function sendDailyHoroscopeToUser(
     if (existing?.sent_at) return 'skipped';
 
     let content = existing?.content;
-    if (!content) {
-      content = await generateDailyHoroscope(user, true);
+    if (!content || content.length < 80) {
+      content = await generateDailyHoroscope(user, false);
       saveHoroscope({ user_id: user.id, date: dateKey, content });
+      void generateDailyHoroscope(user, true).then((aiContent) => {
+        if (aiContent.length >= 120) {
+          saveHoroscope({ user_id: user.id, date: dateKey, content: aiContent });
+        }
+      }).catch((error) => logger.warn('Cron AI horoscope failed', { error, userId: user.telegram_id }));
     }
 
     const lang = parseLangFromHoroscopeKey(dateKey) || resolveUserLang(user);
