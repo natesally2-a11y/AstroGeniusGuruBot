@@ -140,6 +140,9 @@ ${t(lang, 'horoscope.premium_footer')}`;
 
 // ─── Generate horoscope for user ──────────────────────────────────────────────
 
+const AI_MAX_TOKENS = 520;
+const AI_TIMEOUT_MS = 12000;
+
 export async function generateDailyHoroscope(user: User, useAi = true): Promise<string> {
   const lang = getUserLang(user);
   const todayParts = getUserLocalDateParts(user);
@@ -150,67 +153,41 @@ export async function generateDailyHoroscope(user: User, useAi = true): Promise<
   }
 
   const { year, month, day } = parseBirthDate(user.birth_date);
-  const lat = user.birth_lat || 0;
-  const lon = user.birth_lon || 0;
-  const tz = resolveUserTimezone(user.timezone);
-  const moonLine = (moon: ReturnType<typeof getMoonPhaseForUserDay>) =>
-    t(lang, 'horoscope.moon_line', {
-      emoji: moon.emoji,
-      phase: translateMoonPhase(lang, moon.phase),
-      sign: translateSign(lang, moon.sign),
-    });
+  const jd = toJulianDay(year, month, day, 12, 0);
+  const sunPos = calculateSunPosition(jd);
+  const free = generateFreeHoroscope(sunPos.sign, todayParts, dateStr, lang);
+  const moon = getMoonPhaseForUserDay(user, todayParts);
+  const template = `${free}\n\n${t(lang, 'horoscope.moon_line', {
+    emoji: moon.emoji,
+    phase: translateMoonPhase(lang, moon.phase),
+    sign: translateSign(lang, moon.sign),
+  })}`;
 
-  if (!isSubscriptionActive(user)) {
-    const jd = toJulianDay(year, month, day, 12, 0);
-    const sunPos = calculateSunPosition(jd);
-    const free = generateFreeHoroscope(sunPos.sign, todayParts, dateStr, lang);
-    const moon = getMoonPhaseForUserDay(user, todayParts);
-    const template = `${free}\n\n${moonLine(moon)}`;
+  const isPremium = isSubscriptionActive(user);
 
-    if (!useAi || !isAiEnabled()) {
-      return appendFreeUsageFooter(user, template);
-    }
+  if (!useAi || !isAiEnabled()) {
+    return isPremium ? template : appendFreeUsageFooter(user, template);
+  }
 
+  if (!isPremium) {
     const quota = checkAiQuota(user);
     if (!quota.ok) {
       return `${quota.message}\n\n${template}`;
     }
+  }
 
-    const text = await generateAstrologyText(
-      t(lang, 'ai.horoscope_free'),
-      `Sign: ${sunPos.sign}\nMoon: ${moon.phase} in ${moon.sign}\nDate: ${dateStr}\nBase:\n${free}`,
-      template,
-      520, 12000, lang
-    );
+  const text = await generateAstrologyText(
+    t(lang, isPremium ? 'ai.horoscope_premium' : 'ai.horoscope_free'),
+    `Sign: ${sunPos.sign}\nMoon: ${moon.phase} in ${moon.sign}\nDate: ${dateStr}\nBase:\n${free}`,
+    template,
+    AI_MAX_TOKENS, AI_TIMEOUT_MS, lang
+  );
+
+  if (!isPremium) {
     trackAiGeneration(user, 'daily');
     return appendFreeUsageFooter(user, text);
   }
-
-  const natalChart = calculateNatalChartForUser(user.birth_date, user.birth_time, lat, lon, tz);
-  const transitChart = calculateNatalChart(
-    todayParts.year, todayParts.month, todayParts.day, 12, 0, 0, 0
-  );
-  const transits = calculateTransits(natalChart, transitChart);
-  const fallback = generatePremiumHoroscope(user, natalChart, transits, dateStr, todayParts);
-  const moon = getMoonPhaseForUserDay(user, todayParts);
-
-  if (!useAi || !isAiEnabled()) return fallback;
-
-  const transitSummary = transits.slice(0, 5).map(t =>
-    `${t.transitPlanet} ${t.aspectType} ${t.natalPlanet} (${t.energy})`
-  ).join(', ');
-  const numbers = LUCKY_NUMBERS[natalChart.sun.sign];
-  const color = getLuckyColor(lang, natalChart.sun.sign);
-
-  return generateAstrologyText(
-    t(lang, 'ai.horoscope_premium'),
-    `Name: ${user.first_name}\nSun: ${natalChart.sun.sign}, Moon: ${natalChart.moon.sign}, ` +
-      `Асцендент: ${natalChart.ascendant.sign}\nТранзиты: ${transitSummary}\n` +
-      `Луна сегодня: ${moon.phase} в ${moon.sign}\nДата: ${dateStr}\n` +
-      `Числа: ${numbers.join(', ')}, цвет: ${color}`,
-    fallback,
-    800, 12000, lang
-  );
+  return text;
 }
 
 export async function generateTransitForecast(user: User): Promise<string> {
@@ -275,7 +252,7 @@ ${t(lang, 'horoscope.weekly_footer', {
     t(lang, 'ai.horoscope_weekly'),
     `Sun: ${sunSign}, Moon: ${moonSign}, Asc: ${natalChart.ascendant.sign}\n` +
       `Week: ${formatDate(weekStart)} – ${formatDate(weekEnd)}`,
-    fallback, 700, 12000, lang
+    fallback, AI_MAX_TOKENS, AI_TIMEOUT_MS, lang
   );
 }
 
@@ -301,6 +278,6 @@ export async function generateMonthlyHoroscope(user: User, useAi = true): Promis
     t(lang, 'ai.horoscope_monthly'),
     `Month: ${monthName}\nChart: Sun ${natalChart.sun.sign}, Moon ${natalChart.moon.sign}, ` +
       `Asc ${natalChart.ascendant.sign}`,
-    fallback, 700, 12000, lang
+    fallback, AI_MAX_TOKENS, AI_TIMEOUT_MS, lang
   );
 }

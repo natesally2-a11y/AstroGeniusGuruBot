@@ -140,7 +140,7 @@ export function createBot(): Bot {
 
 export function getWebhookCallback(bot: Bot) {
   return webhookCallback(bot, 'express', {
-    timeoutMilliseconds: 8000,
+    timeoutMilliseconds: 55_000,
     onTimeout: 'return',
   });
 }

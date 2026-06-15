@@ -2,16 +2,12 @@ import { Bot } from 'grammy';
 import { getUserByTelegramId } from '../../database/queries';
 import { getMoonPhase } from '../../astrology/features';
 import { formatLuckyDayMessage } from '../../astrology/lucky';
+import { generateMonthlyHoroscope, generateTransitForecast } from '../../astrology/horoscope';
 import { isSubscriptionActive } from '../../payments/stars';
 import { formatLocalizedDate, tUser } from '../../i18n';
 import { localizeMoon } from '../../i18n/astro';
 import { getUserLang } from '../../i18n';
-import { tryBeginForecastJob } from '../helpers/forecastLock';
-import {
-  generateMonthlyHoroscopeReliable,
-  generateTransitForecastReliable,
-  runMessageDelivery,
-} from '../helpers/horoscopeDelivery';
+import { tryBeginForecastJob, endForecastJob } from '../helpers/forecastLock';
 import { logger } from '../../utils/logger';
 
 export function registerFeaturesHandler(bot: Bot): void {
@@ -48,16 +44,12 @@ export function registerFeaturesHandler(bot: Bot): void {
     const telegramId = ctx.from!.id;
     if (!tryBeginForecastJob(telegramId)) return;
     const user = getUserByTelegramId(telegramId);
-    const loadingMsg = await ctx.reply(tUser(user, 'today.loading'), { parse_mode: 'Markdown' });
-    await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-    runMessageDelivery({
-      api: ctx.api,
-      chatId: ctx.chat!.id,
-      messageId: loadingMsg.message_id,
-      telegramId,
-      errorText: tUser(user, 'today.error'),
-      generate: () => formatLuckyDayMessage(user),
-    });
+    try {
+      await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+      await ctx.reply(await formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
+    } finally {
+      endForecastJob(telegramId);
+    }
   });
 
   bot.command('month', async (ctx) => {
@@ -72,16 +64,12 @@ export function registerFeaturesHandler(bot: Bot): void {
       return;
     }
     if (!tryBeginForecastJob(telegramId)) return;
-    const loadingMsg = await ctx.reply(tUser(user, 'today.loading'), { parse_mode: 'Markdown' });
-    await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-    runMessageDelivery({
-      api: ctx.api,
-      chatId: ctx.chat!.id,
-      messageId: loadingMsg.message_id,
-      telegramId,
-      errorText: tUser(user, 'today.error'),
-      generate: () => generateMonthlyHoroscopeReliable(user),
-    });
+    try {
+      await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+      await ctx.reply(await generateMonthlyHoroscope(user), { parse_mode: 'Markdown' });
+    } finally {
+      endForecastJob(telegramId);
+    }
   });
 
   bot.command('transits', async (ctx) => {
@@ -92,16 +80,12 @@ export function registerFeaturesHandler(bot: Bot): void {
       return;
     }
     if (!tryBeginForecastJob(telegramId)) return;
-    const loadingMsg = await ctx.reply(tUser(user, 'today.loading'), { parse_mode: 'Markdown' });
-    await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-    runMessageDelivery({
-      api: ctx.api,
-      chatId: ctx.chat!.id,
-      messageId: loadingMsg.message_id,
-      telegramId,
-      errorText: tUser(user, 'today.error'),
-      generate: () => generateTransitForecastReliable(user),
-    });
+    try {
+      await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+      await ctx.reply(await generateTransitForecast(user), { parse_mode: 'Markdown' });
+    } finally {
+      endForecastJob(telegramId);
+    }
   });
 
   bot.command('cancel', async (ctx) => {
