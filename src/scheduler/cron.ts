@@ -30,7 +30,7 @@ async function sendDailyHoroscopeToUser(
 
     let content = existing?.content;
     if (!content) {
-      content = await generateDailyHoroscope(user);
+      content = await generateDailyHoroscope(user, true);
       saveHoroscope({ user_id: user.id, date: dateKey, content });
     }
 

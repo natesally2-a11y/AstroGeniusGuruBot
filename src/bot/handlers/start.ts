@@ -5,7 +5,6 @@ import { getGuideText, getUserLang, tUser } from '../../i18n';
 import { sendWelcomeMessages } from '../helpers/welcome';
 import { formatLuckyDayMessage } from '../../astrology/lucky';
 import { birthDatePromptKeyboard, compatAppKeyboard, openChartKeyboard } from '../helpers/keyboards';
-import { tryBeginForecastJob, endForecastJob } from '../helpers/forecastLock';
 import { logger } from '../../utils/logger';
 
 function parseStartPayload(text: string | undefined): string | null {
@@ -36,15 +35,9 @@ export function registerStartHandler(bot: Bot): void {
 
   bot.callbackQuery('lucky_day', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
-    const telegramId = ctx.from.id;
-    if (!tryBeginForecastJob(telegramId)) return;
-    const user = getUserByTelegramId(telegramId);
-    try {
-      await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-      await ctx.reply(await formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
-    } finally {
-      endForecastJob(telegramId);
-    }
+    const user = getUserByTelegramId(ctx.from.id);
+    await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+    await ctx.reply(await formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
   });
 
   bot.callbackQuery('natal_chart', async (ctx) => {

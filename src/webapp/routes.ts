@@ -26,7 +26,6 @@ import {
   sendSubscriptionInvoice, sendNatalChartInvoice,
   SUBSCRIPTION_PRICE, NATAL_CHART_PRICE,
 } from '../payments/stars';
-import { getAiQuotaStatus } from '../payments/usageLimits';
 import { isAdmin } from '../config/admin';
 import { isLifetimePremium } from '../config/vip';
 import { getUserLang, normalizeLangCode, t } from '../i18n';
@@ -80,7 +79,6 @@ router.get('/user', requireAuth, (req: Request, res: Response) => {
   const userIsAdmin = isAdmin(user);
 
   const lang = getUserLang(user);
-  const aiUsage = getAiQuotaStatus(user);
 
   res.json({
     id: user.id,
@@ -102,12 +100,6 @@ router.get('/user', requireAuth, (req: Request, res: Response) => {
     language: lang,
     languageCode: user.language_code,
     prices: { subscription: SUBSCRIPTION_PRICE, natalChart: NATAL_CHART_PRICE },
-    aiUsage: {
-      used: aiUsage.used,
-      limit: aiUsage.limit,
-      remaining: aiUsage.remaining,
-      unlimited: aiUsage.limit === -1,
-    },
     chart: chart ? {
       sunSign: chart.sun_sign,
       moonSign: chart.moon_sign,
@@ -137,18 +129,10 @@ router.get('/horoscope/daily', requireAuth, async (req: Request, res: Response) 
   const content = cached?.content || await generateDailyHoroscope(user, false);
   if (!cached) saveHoroscope({ user_id: user.id, date: cacheKey, content });
 
-  const aiUsage = getAiQuotaStatus(user);
-
   res.json({
     date: getLocalDateKey(user.timezone),
     content,
     isPremium: isSubscriptionActive(user),
-    aiUsage: {
-      used: aiUsage.used,
-      limit: aiUsage.limit,
-      remaining: aiUsage.remaining,
-      unlimited: aiUsage.limit === -1,
-    },
   });
 });
 

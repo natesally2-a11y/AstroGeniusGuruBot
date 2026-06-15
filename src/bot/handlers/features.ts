@@ -7,7 +7,6 @@ import { isSubscriptionActive } from '../../payments/stars';
 import { formatLocalizedDate, tUser } from '../../i18n';
 import { localizeMoon } from '../../i18n/astro';
 import { getUserLang } from '../../i18n';
-import { tryBeginForecastJob, endForecastJob } from '../helpers/forecastLock';
 import { logger } from '../../utils/logger';
 
 export function registerFeaturesHandler(bot: Bot): void {
@@ -41,20 +40,13 @@ export function registerFeaturesHandler(bot: Bot): void {
   });
 
   bot.command('lucky', async (ctx) => {
-    const telegramId = ctx.from!.id;
-    if (!tryBeginForecastJob(telegramId)) return;
-    const user = getUserByTelegramId(telegramId);
-    try {
-      await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-      await ctx.reply(await formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
-    } finally {
-      endForecastJob(telegramId);
-    }
+    const user = getUserByTelegramId(ctx.from!.id);
+    await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+    await ctx.reply(await formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
   });
 
   bot.command('month', async (ctx) => {
-    const telegramId = ctx.from!.id;
-    const user = getUserByTelegramId(telegramId);
+    const user = getUserByTelegramId(ctx.from!.id);
     if (!user?.birth_date) {
       await ctx.reply(tUser(user, 'settings.birth_required'));
       return;
@@ -63,29 +55,19 @@ export function registerFeaturesHandler(bot: Bot): void {
       await ctx.reply(tUser(user, 'features.month_premium'));
       return;
     }
-    if (!tryBeginForecastJob(telegramId)) return;
-    try {
-      await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-      await ctx.reply(await generateMonthlyHoroscope(user), { parse_mode: 'Markdown' });
-    } finally {
-      endForecastJob(telegramId);
-    }
+    await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+    const forecast = await generateMonthlyHoroscope(user);
+    await ctx.reply(forecast, { parse_mode: 'Markdown' });
   });
 
   bot.command('transits', async (ctx) => {
-    const telegramId = ctx.from!.id;
-    const user = getUserByTelegramId(telegramId);
+    const user = getUserByTelegramId(ctx.from!.id);
     if (!user?.birth_date) {
       await ctx.reply(tUser(user, 'settings.birth_required'));
       return;
     }
-    if (!tryBeginForecastJob(telegramId)) return;
-    try {
-      await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-      await ctx.reply(await generateTransitForecast(user), { parse_mode: 'Markdown' });
-    } finally {
-      endForecastJob(telegramId);
-    }
+    await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+    await ctx.reply(await generateTransitForecast(user), { parse_mode: 'Markdown' });
   });
 
   bot.command('cancel', async (ctx) => {

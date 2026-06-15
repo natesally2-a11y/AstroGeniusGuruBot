@@ -1,7 +1,6 @@
 import { Bot, webhookCallback } from 'grammy';
 import { logger } from '../utils/logger';
 import { userMiddleware } from './middleware/userMiddleware';
-import { updateDedupMiddleware } from './middleware/updateDedup';
 import { registerStartHandler } from './handlers/start';
 import { registerTodayHandler } from './handlers/today';
 import { registerSubscribeHandler } from './handlers/subscribe';
@@ -25,7 +24,6 @@ export function createBot(): Bot {
   });
 
   bot.use(userMiddleware);
-  bot.use(updateDedupMiddleware());
 
   registerStartHandler(bot);
   registerTodayHandler(bot);
