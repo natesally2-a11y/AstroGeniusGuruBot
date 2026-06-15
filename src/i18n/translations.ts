@@ -55,7 +55,8 @@ export type TranslationKey =
   | 'transit.aspect.conjunction' | 'transit.aspect.opposition' | 'transit.aspect.trine'
   | 'transit.aspect.square' | 'transit.aspect.sextile'
   | 'ai.system' | 'ai.horoscope_free' | 'ai.horoscope_premium' | 'ai.horoscope_weekly'
-  | 'ai.horoscope_monthly' | 'ai.lucky' | 'ai.transits';
+  | 'ai.horoscope_monthly' | 'ai.lucky' | 'ai.transits'
+  | 'usage.limit_reached' | 'usage.remaining' | 'usage.free_plan';
 
 type Dict = Record<TranslationKey, string>;
 
@@ -103,12 +104,12 @@ const ru: Dict = {
     '🔮 */today* — гороскоп на сегодня\n' +
     '🌙 */moon* — фаза луны\n🍀 */lucky* — счастливый день\n' +
     '🪐 */transits* — влияние планет\n📅 */month* — прогноз на месяц *(Premium)*\n' +
-    '⭐ */subscribe* — Premium (99 ⭐/мес)\n❌ */cancel* — отменить автопродление\n' +
+    '⭐ */subscribe* — Premium (199 ⭐/мес)\n❌ */cancel* — отменить автопродление\n' +
     '⚙️ */settings* — дата, время, город рождения\n🌍 */language* — сменить язык\n' +
     '📄 */privacy* — политика конфиденциальности\n❓ */help* — список команд',
   'subscribe.terms':
     '📋 *Условия подписки Premium*\n\n' +
-    '• *99 ⭐ за 30 дней*\n• Автопродление: счёт за 3 дня до окончания\n' +
+    '• *199 ⭐ за 30 дней*\n• Автопродление: счёт за 3 дня до окончания\n' +
     '• Отмена: /cancel или в Mini App\n• Premium остаётся до конца оплаченного периода',
   'settings.menu': '⚙️ *Настройки*\n\nКоманда /settings — дата, время и город рождения.',
   'settings.birth_required': '📅 Сначала укажите дату рождения: /settings',
@@ -263,6 +264,9 @@ const ru: Dict = {
   'ai.horoscope_monthly': 'Создай месячный астрологический прогноз с ключевыми датами и рекомендациями.',
   'ai.lucky': 'Создай астрологический прогноз счастливого дня. Используй переданные числа, цвет, камень и время.',
   'ai.transits': 'Кратко опиши транзиты на сегодня (до 8 предложений). Формат Telegram: *жирный*, без **. Для каждого транзита — смысл и совет. Заверши итогом на день.',
+  'usage.limit_reached': '🔒 *Лимит бесплатных генераций исчерпан*\n\nИспользовано *{used} из {limit}* AI-прогнозов за 7 дней.\n\n⭐ *Premium — {price} ⭐/мес:* безлимит, недельный и месячный прогноз, транзиты.\n\n/subscribe',
+  'usage.remaining': '_Бесплатных AI-генераций на неделю: {remaining} из {limit}. Premium ({price} ⭐/мес) — безлимит._',
+  'usage.free_plan': '🆓 Бесплатно: {limit} AI-генерации в неделю',
 };
 
 const en: Dict = {
@@ -308,12 +312,12 @@ const en: Dict = {
   'guide.body':
     '🔮 */today* — daily horoscope\n🌙 */moon* — moon phase\n🍀 */lucky* — lucky day\n' +
     '🪐 */transits* — planetary transits\n📅 */month* — monthly forecast *(Premium)*\n' +
-    '⭐ */subscribe* — Premium (99 ⭐/mo)\n❌ */cancel* — cancel auto-renewal\n' +
+    '⭐ */subscribe* — Premium (199 ⭐/mo)\n❌ */cancel* — cancel auto-renewal\n' +
     '⚙️ */settings* — birth date, time, city\n🌍 */language* — change language\n' +
     '📄 */privacy* — privacy policy\n❓ */help* — command list',
   'subscribe.terms':
     '📋 *Premium subscription terms*\n\n' +
-    '• *99 ⭐ for 30 days*\n• Auto-renewal: invoice 3 days before expiry\n' +
+    '• *199 ⭐ for 30 days*\n• Auto-renewal: invoice 3 days before expiry\n' +
     '• Cancel: /cancel or in Mini App\n• Premium stays until paid period ends',
   'settings.menu': '⚙️ *Settings*\n\nUse /settings for birth date, time and city.',
   'settings.birth_required': '📅 Please set your birth date first: /settings',
@@ -468,6 +472,9 @@ const en: Dict = {
   'ai.horoscope_monthly': 'Create a monthly astrological forecast with key dates and recommendations.',
   'ai.lucky': 'Create a lucky-day astrological forecast. Use the provided numbers, color, stone and time.',
   'ai.transits': 'Briefly describe today\'s transits (up to 8 sentences). Telegram format: *bold*, no **. For each transit — meaning and advice. End with a day summary.',
+  'usage.limit_reached': '🔒 *Free generation limit reached*\n\nUsed *{used} of {limit}* AI forecasts in the last 7 days.\n\n⭐ *Premium — {price} ⭐/mo:* unlimited, weekly, monthly, transits.\n\n/subscribe',
+  'usage.remaining': '_Free AI generations this week: {remaining} of {limit}. Premium ({price} ⭐/mo) — unlimited._',
+  'usage.free_plan': '🆓 Free: {limit} AI generations per week',
 };
 
 const es: Dict = { ...en,
@@ -517,12 +524,12 @@ const es: Dict = { ...en,
   'guide.body':
     '🔮 */today* — horóscopo diario\n🌙 */moon* — fase lunar\n🍀 */lucky* — día de suerte\n' +
     '🪐 */transits* — tránsitos planetarios\n📅 */month* — pronóstico mensual *(Premium)*\n' +
-    '⭐ */subscribe* — Premium (99 ⭐/mes)\n❌ */cancel* — cancelar renovación auto\n' +
+    '⭐ */subscribe* — Premium (199 ⭐/mes)\n❌ */cancel* — cancelar renovación auto\n' +
     '⚙️ */settings* — fecha, hora, ciudad de nacimiento\n🌍 */language* — cambiar idioma\n' +
     '📄 */privacy* — política de privacidad\n❓ */help* — lista de comandos',
   'subscribe.terms':
     '📋 *Condiciones Premium*\n\n' +
-    '• *99 ⭐ por 30 días*\n• Renovación auto: factura 3 días antes\n' +
+    '• *199 ⭐ por 30 días*\n• Renovación auto: factura 3 días antes\n' +
     '• Cancelar: /cancel o en Mini App\n• Premium hasta fin del periodo pagado',
   'settings.menu': '⚙️ *Ajustes*\n\nUsa /settings para fecha, hora y ciudad de nacimiento.',
   'settings.birth_required': '📅 Indica primero tu fecha de nacimiento: /settings',
@@ -643,6 +650,9 @@ const es: Dict = { ...en,
   'ai.horoscope_monthly': 'Crea un pronóstico mensual con fechas clave y recomendaciones.',
   'ai.lucky': 'Crea un pronóstico astrológico del día de suerte. Usa los números, color, piedra y hora proporcionados.',
   'ai.transits': 'Describe brevemente los tránsitos de hoy (hasta 8 frases). Formato Telegram: *negrita*, sin **. Para cada tránsito — significado y consejo. Termina con un resumen del día.',
+  'usage.limit_reached': '🔒 *Límite gratuito agotado*\n\nUsaste *{used} de {limit}* pronósticos IA en 7 días.\n\n⭐ *Premium — {price} ⭐/mes:* ilimitado, semanal, mensual, tránsitos.\n\n/subscribe',
+  'usage.remaining': '_Generaciones IA gratis esta semana: {remaining} de {limit}. Premium ({price} ⭐/mes) — ilimitado._',
+  'usage.free_plan': '🆓 Gratis: {limit} generaciones IA por semana',
 };
 
 const ar: Dict = { ...en,
@@ -692,12 +702,12 @@ const ar: Dict = { ...en,
   'guide.body':
     '🔮 */today* — أبراج اليوم\n🌙 */moon* — طور القمر\n🍀 */lucky* — يوم الحظ\n' +
     '🪐 */transits* — ترانزيت الكواكب\n📅 */month* — توقعات الشهر *(Premium)*\n' +
-    '⭐ */subscribe* — Premium (99 ⭐/شهر)\n❌ */cancel* — إلغاء التجديد التلقائي\n' +
+    '⭐ */subscribe* — Premium (199 ⭐/شهر)\n❌ */cancel* — إلغاء التجديد التلقائي\n' +
     '⚙️ */settings* — تاريخ ووقت ومدينة الميلاد\n🌍 */language* — تغيير اللغة\n' +
     '📄 */privacy* — سياسة الخصوصية\n❓ */help* — قائمة الأوامر',
   'subscribe.terms':
     '📋 *شروط Premium*\n\n' +
-    '• *99 ⭐ لـ 30 يوماً*\n• تجديد تلقائي: فاتورة قبل 3 أيام\n' +
+    '• *199 ⭐ لـ 30 يوماً*\n• تجديد تلقائي: فاتورة قبل 3 أيام\n' +
     '• الإلغاء: /cancel أو في Mini App\n• Premium حتى نهاية الفترة المدفوعة',
   'settings.menu': '⚙️ *الإعدادات*\n\nاستخدم /settings لتاريخ ووقت ومدينة الميلاد.',
   'settings.birth_required': '📅 أدخل تاريخ الميلاد أولاً: /settings',
@@ -818,6 +828,9 @@ const ar: Dict = { ...en,
   'ai.horoscope_monthly': 'أنشئ توقعات شهرية مع تواريخ مهمة وتوصيات.',
   'ai.lucky': 'أنشئ توقعاً ليوم الحظ. استخدم الأرقام واللون والحجر والوقت المقدمة.',
   'ai.transits': 'صف ترانزيت اليوم باختصار (حتى 8 جمل). تنسيق Telegram: *عريض*، بدون **. لكل ترانزيت — المعنى والنصيحة. اختم بملخص اليوم.',
+  'usage.limit_reached': '🔒 *انتهى الحد المجاني*\n\nاستخدمت *{used} من {limit}* خلال 7 أيام.\n\n⭐ *Premium — {price} ⭐/شهر:* غير محدود.\n\n/subscribe',
+  'usage.remaining': '_متبقي هذا الأسبوع: {remaining} من {limit}. Premium ({price} ⭐/شهر) — غير محدود._',
+  'usage.free_plan': '🆓 مجاناً: {limit} توليدات IA أسبوعياً',
 };
 
 export const TRANSLATIONS: Record<LangCode, Dict> = { ru, en, es, ar };

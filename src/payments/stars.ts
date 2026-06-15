@@ -7,10 +7,9 @@ import {
 import { isAdmin } from '../config/admin';
 import { isLifetimePremium } from '../config/vip';
 import { getUserLang, t } from '../i18n';
+import { SUBSCRIPTION_PRICE, SUBSCRIPTION_DAYS, NATAL_CHART_PRICE } from '../config/pricing';
 
-export const SUBSCRIPTION_PRICE = parseInt(process.env.SUBSCRIPTION_PRICE || '99', 10);
-export const SUBSCRIPTION_DAYS = parseInt(process.env.SUBSCRIPTION_DAYS || '30', 10);
-export const NATAL_CHART_PRICE = parseInt(process.env.NATAL_CHART_PRICE || '99', 10);
+export { SUBSCRIPTION_PRICE, SUBSCRIPTION_DAYS, NATAL_CHART_PRICE };
 
 export interface InvoiceParams {
   title: string;

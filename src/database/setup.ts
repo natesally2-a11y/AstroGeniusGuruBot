@@ -110,6 +110,14 @@ export function initializeDatabase(): void {
     `ALTER TABLE payments ADD COLUMN payment_type TEXT DEFAULT 'subscription'`,
     `ALTER TABLE users ADD COLUMN last_renewal_notice TEXT`,
     `ALTER TABLE users ADD COLUMN referral_source TEXT`,
+    `CREATE TABLE IF NOT EXISTS ai_generations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_ai_generations_user_created ON ai_generations(user_id, created_at)`,
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* column exists */ }

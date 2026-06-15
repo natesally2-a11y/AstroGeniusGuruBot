@@ -316,6 +316,22 @@ export function markHoroscopeSent(userId: number, date: string): void {
   `).run(userId, date);
 }
 
+// ─── AI usage tracking ────────────────────────────────────────────────────────
+
+export function countAiGenerationsSince(userId: number, days: number): number {
+  const row = db.prepare(`
+    SELECT COUNT(*) as c FROM ai_generations
+    WHERE user_id = ? AND created_at >= datetime('now', ?)
+  `).get(userId, `-${days} days`) as { c: number };
+  return row?.c ?? 0;
+}
+
+export function recordAiGeneration(userId: number, kind: string): void {
+  db.prepare(`
+    INSERT INTO ai_generations (user_id, kind) VALUES (?, ?)
+  `).run(userId, kind.slice(0, 32));
+}
+
 // ─── Payment Queries ──────────────────────────────────────────────────────────
 
 export function createPayment(data: {

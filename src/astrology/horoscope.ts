@@ -5,7 +5,8 @@ import {
 } from './engine';
 import { User } from '../database/queries';
 import { isSubscriptionActive } from '../payments/stars';
-import { generateAstrologyText } from '../ai/llm';
+import { checkAiQuota, trackAiGeneration, appendFreeUsageFooter } from '../payments/usageLimits';
+import { generateAstrologyText, isAiEnabled } from '../ai/llm';
 import { getUserLang, t } from '../i18n';
 import { translateSign, translateMoonPhase } from '../i18n/astro';
 import {
@@ -164,13 +165,25 @@ export async function generateDailyHoroscope(user: User, useAi = true): Promise<
     const sunPos = calculateSunPosition(jd);
     const free = generateFreeHoroscope(sunPos.sign, todayParts, dateStr, lang);
     const moon = getMoonPhaseForUserDay(user, todayParts);
-    if (!useAi) return free + `\n\n${moonLine(moon)}`;
-    return generateAstrologyText(
+    const template = `${free}\n\n${moonLine(moon)}`;
+
+    if (!useAi || !isAiEnabled()) {
+      return appendFreeUsageFooter(user, template);
+    }
+
+    const quota = checkAiQuota(user);
+    if (!quota.ok) {
+      return `${quota.message}\n\n${template}`;
+    }
+
+    const text = await generateAstrologyText(
       t(lang, 'ai.horoscope_free'),
       `Sign: ${sunPos.sign}\nMoon: ${moon.phase} in ${moon.sign}\nDate: ${dateStr}\nBase:\n${free}`,
-      free + `\n\n${moonLine(moon)}`,
-      1300, 55000, lang
+      template,
+      520, 12000, lang
     );
+    trackAiGeneration(user, 'daily');
+    return appendFreeUsageFooter(user, text);
   }
 
   const natalChart = calculateNatalChartForUser(user.birth_date, user.birth_time, lat, lon, tz);
@@ -181,7 +194,7 @@ export async function generateDailyHoroscope(user: User, useAi = true): Promise<
   const fallback = generatePremiumHoroscope(user, natalChart, transits, dateStr, todayParts);
   const moon = getMoonPhaseForUserDay(user, todayParts);
 
-  if (!useAi) return fallback;
+  if (!useAi || !isAiEnabled()) return fallback;
 
   const transitSummary = transits.slice(0, 5).map(t =>
     `${t.transitPlanet} ${t.aspectType} ${t.natalPlanet} (${t.energy})`
@@ -196,7 +209,7 @@ export async function generateDailyHoroscope(user: User, useAi = true): Promise<
       `Луна сегодня: ${moon.phase} в ${moon.sign}\nДата: ${dateStr}\n` +
       `Числа: ${numbers.join(', ')}, цвет: ${color}`,
     fallback,
-    1600, 55000, lang
+    800, 12000, lang
   );
 }
 
@@ -256,13 +269,13 @@ ${t(lang, 'horoscope.weekly_footer', {
   moon: translateSign(lang, moonSign),
 })}`;
 
-  if (!useAi) return fallback;
+  if (!useAi || !isAiEnabled()) return fallback;
 
   return generateAstrologyText(
     t(lang, 'ai.horoscope_weekly'),
     `Sun: ${sunSign}, Moon: ${moonSign}, Asc: ${natalChart.ascendant.sign}\n` +
       `Week: ${formatDate(weekStart)} – ${formatDate(weekEnd)}`,
-    fallback, 900, 45000, lang
+    fallback, 700, 12000, lang
   );
 }
 

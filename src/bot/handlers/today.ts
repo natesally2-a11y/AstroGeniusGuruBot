@@ -12,6 +12,8 @@ import {
 import { resolveUserLang, tUser } from '../../i18n';
 import { logger } from '../../utils/logger';
 
+const activeHoroscopeJobs = new Set<number>();
+
 function isBrokenHoroscopeCache(content: string): boolean {
   if (content.length < 200) return true;
   if (/###/.test(content)) return true;
@@ -24,10 +26,15 @@ function resolveHoroscopeLang(ctx: Context, user: NonNullable<ReturnType<typeof 
     || resolveUserLang(user, ctx.from?.language_code);
 }
 
-async function sendTodayHoroscope(ctx: Context): Promise<void> {
+export async function sendTodayHoroscope(ctx: Context): Promise<void> {
   const user = getUserByTelegramId(ctx.from!.id);
   if (!user?.birth_date) {
     await ctx.reply(tUser(user, 'settings.birth_required'));
+    return;
+  }
+
+  if (activeHoroscopeJobs.has(user.id)) {
+    logger.info('Daily horoscope already in progress', { userId: user.id });
     return;
   }
 
@@ -42,6 +49,7 @@ async function sendTodayHoroscope(ctx: Context): Promise<void> {
     return;
   }
 
+  activeHoroscopeJobs.add(user.id);
   const loadingMsg = await ctx.reply(
     `${tUser(user, 'today.loading')}\n\n${tUser(user, 'today.loading_sub')}`,
     { parse_mode: 'Markdown' }
@@ -61,6 +69,8 @@ async function sendTodayHoroscope(ctx: Context): Promise<void> {
       loadingMsg.message_id,
       tUser(user, 'today.error')
     ).catch(() => {});
+  } finally {
+    activeHoroscopeJobs.delete(user.id);
   }
 }
 

@@ -1,6 +1,7 @@
 import { Bot, webhookCallback } from 'grammy';
 import { logger } from '../utils/logger';
 import { userMiddleware } from './middleware/userMiddleware';
+import { updateDedupMiddleware } from './middleware/updateDedup';
 import { registerStartHandler } from './handlers/start';
 import { registerTodayHandler } from './handlers/today';
 import { registerSubscribeHandler } from './handlers/subscribe';
@@ -24,6 +25,7 @@ export function createBot(): Bot {
   });
 
   bot.use(userMiddleware);
+  bot.use(updateDedupMiddleware());
 
   registerStartHandler(bot);
   registerTodayHandler(bot);
@@ -78,40 +80,20 @@ export function createBot(): Bot {
       if (data.action === 'command' && data.command) {
         const cmd = data.command.replace('/', '');
         const { tUser } = await import('../i18n');
-        const handlers: Record<string, () => Promise<void>> = {
-          today: async () => { await ctx.reply(tUser(user, 'today.sending')); },
-          settings: async () => { await ctx.reply(tUser(user, 'today.settings_hint')); },
-        };
-        if (handlers[cmd]) {
-          await handlers[cmd]();
-        } else {
-          await ctx.reply(tUser(user, 'common.run_command', { command: data.command }));
-        }
-        // Trigger actual command by simulating - user can tap
-        if (cmd === 'today') {
-          const { generateDailyHoroscope } = await import('../astrology/horoscope');
-          const { getHoroscopeCacheKey, parseLangFromHoroscopeKey } = await import('../astrology/timezone');
-          const { horoscopeFollowUpKeyboardForLang } = await import('./helpers/keyboards');
-          const { isSubscriptionActive } = await import('../payments/stars');
-          const { resolveUserLang } = await import('../i18n');
-          if (user?.birth_date) {
-            const dateKey = getHoroscopeCacheKey(user);
-            const lang = parseLangFromHoroscopeKey(dateKey) || resolveUserLang(user, ctx.from?.language_code);
-            const text = await generateDailyHoroscope(user);
-            await ctx.reply(text, {
-              parse_mode: 'Markdown',
-              reply_markup: horoscopeFollowUpKeyboardForLang(lang, isSubscriptionActive(user)),
-            });
-          }
+        if (cmd === 'today' && user?.birth_date) {
+          const { sendTodayHoroscope } = await import('./handlers/today');
+          await sendTodayHoroscope(ctx);
+          return;
         }
         if (cmd === 'settings') {
           const { enterDateKeyboard } = await import('./helpers/keyboards');
-          const { tUser } = await import('../i18n');
           await ctx.reply(tUser(user, 'birth.enter_date'), {
             parse_mode: 'Markdown',
             reply_markup: enterDateKeyboard(user),
           });
+          return;
         }
+        await ctx.reply(tUser(user, 'common.run_command', { command: data.command }));
       }
     } catch (e) {
       logger.error('web_app_data error', { e });
@@ -157,5 +139,8 @@ export function createBot(): Bot {
 }
 
 export function getWebhookCallback(bot: Bot) {
-  return webhookCallback(bot, 'express');
+  return webhookCallback(bot, 'express', {
+    timeoutMilliseconds: 55_000,
+    onTimeout: 'return',
+  });
 }
