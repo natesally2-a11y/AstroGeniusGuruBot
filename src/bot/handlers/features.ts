@@ -4,6 +4,7 @@ import { getMoonPhase } from '../../astrology/features';
 import { formatLuckyDayMessage } from '../../astrology/lucky';
 import { generateMonthlyHoroscope, generateTransitForecast } from '../../astrology/horoscope';
 import { isSubscriptionActive } from '../../payments/stars';
+import { checkAiQuota, trackAiGeneration } from '../../payments/usageLimits';
 import { formatLocalizedDate, tUser } from '../../i18n';
 import { localizeMoon } from '../../i18n/astro';
 import { getUserLang } from '../../i18n';
@@ -41,8 +42,15 @@ export function registerFeaturesHandler(bot: Bot): void {
 
   bot.command('lucky', async (ctx) => {
     const user = getUserByTelegramId(ctx.from!.id);
+    const quota = checkAiQuota(user!);
+    if (!quota.ok) {
+      await ctx.reply(quota.message || tUser(user, 'today.error'), { parse_mode: 'Markdown' });
+      return;
+    }
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-    await ctx.reply(await formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
+    const text = await formatLuckyDayMessage(user);
+    trackAiGeneration(user!, 'lucky');
+    await ctx.reply(text, { parse_mode: 'Markdown' });
   });
 
   bot.command('month', async (ctx) => {
@@ -56,7 +64,13 @@ export function registerFeaturesHandler(bot: Bot): void {
       return;
     }
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+    const quota = checkAiQuota(user);
+    if (!quota.ok) {
+      await ctx.reply(quota.message || tUser(user, 'today.error'), { parse_mode: 'Markdown' });
+      return;
+    }
     const forecast = await generateMonthlyHoroscope(user);
+    trackAiGeneration(user, 'monthly');
     await ctx.reply(forecast, { parse_mode: 'Markdown' });
   });
 
@@ -66,8 +80,15 @@ export function registerFeaturesHandler(bot: Bot): void {
       await ctx.reply(tUser(user, 'settings.birth_required'));
       return;
     }
+    const quota = checkAiQuota(user);
+    if (!quota.ok) {
+      await ctx.reply(quota.message || tUser(user, 'today.error'), { parse_mode: 'Markdown' });
+      return;
+    }
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-    await ctx.reply(await generateTransitForecast(user), { parse_mode: 'Markdown' });
+    const text = await generateTransitForecast(user);
+    trackAiGeneration(user, 'transits');
+    await ctx.reply(text, { parse_mode: 'Markdown' });
   });
 
   bot.command('cancel', async (ctx) => {

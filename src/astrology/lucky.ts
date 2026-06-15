@@ -36,6 +36,6 @@ export async function formatLuckyDayMessage(user?: User | null): Promise<string>
     `Sign: ${lucky.sign}\nDate: ${today}\nNumbers: ${lucky.numbers.join(', ')}\n` +
       `Color: ${lucky.color}\nStone: ${lucky.stone}\nBest time: ${lucky.bestTime}`,
     fallback,
-    500, 45000, getUserLang(user)
+    520, 60_000, getUserLang(user)
   );
 }

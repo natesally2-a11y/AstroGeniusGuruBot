@@ -111,8 +111,8 @@ export async function generateTransitForecastResult(user: User): Promise<Transit
     `Sun ${natalChart.sun.sign}, Moon ${natalChart.moon.sign}, Asc ${natalChart.ascendant.sign}\n` +
       `Date: ${today}\n${transitData}`,
     fallback,
-    650,
-    18000,
+    520,
+    60_000,
     lang
   );
 
