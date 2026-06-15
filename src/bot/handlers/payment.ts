@@ -4,9 +4,9 @@ import {
   SUBSCRIPTION_PRICE, NATAL_CHART_PRICE,
 } from '../../payments/stars';
 import { getUserByTelegramId } from '../../database/queries';
+import { formatLocalizedDate, tUser } from '../../i18n';
 import { logger } from '../../utils/logger';
-
-const MINI_APP_URL = process.env.MINI_APP_URL || 'https://yourdomain.com';
+import { paymentChartKeyboard, paymentPremiumKeyboard } from '../helpers/keyboards';
 
 export function registerPaymentHandlers(bot: Bot): void {
   bot.on('pre_checkout_query', async (ctx) => {
@@ -15,24 +15,25 @@ export function registerPaymentHandlers(bot: Bot): void {
       amount: ctx.preCheckoutQuery.total_amount,
     });
 
+    const user = getUserByTelegramId(ctx.from.id);
+
     try {
       const payload = JSON.parse(ctx.preCheckoutQuery.invoice_payload);
       const validTypes = ['subscription', 'natal_chart'];
       if (!validTypes.includes(payload.type)) {
-        await ctx.answerPreCheckoutQuery(false, { error_message: 'Неверный тип платежа' });
+        await ctx.answerPreCheckoutQuery(false, { error_message: tUser(user, 'payment.invalid_type') });
         return;
       }
 
-      const user = getUserByTelegramId(ctx.from.id);
       if (!user) {
-        await ctx.answerPreCheckoutQuery(false, { error_message: 'Пользователь не найден' });
+        await ctx.answerPreCheckoutQuery(false, { error_message: tUser(user, 'payment.user_not_found') });
         return;
       }
 
       await ctx.answerPreCheckoutQuery(true);
     } catch (error) {
       logger.error('Pre-checkout error', { error });
-      await ctx.answerPreCheckoutQuery(false, { error_message: 'Ошибка обработки платежа' });
+      await ctx.answerPreCheckoutQuery(false, { error_message: tUser(user, 'payment.process_error') });
     }
   });
 
@@ -60,16 +61,12 @@ export function registerPaymentHandlers(bot: Bot): void {
       );
 
       if (payloadType === 'natal_chart') {
+        const user = getUserByTelegramId(telegramId);
         await ctx.reply(
-          `🎉 *Натальная карта разблокирована!*\n\n` +
-          `✅ Оплата: *${payment.total_amount} ⭐*\n` +
-          `🌌 Доступ к полной натальной карте с AI-интерпретацией на 30 дней.\n\n` +
-          `Откройте Mini App → вкладка «Карта»`,
+          tUser(user, 'payment.chart_unlocked', { amount: String(payment.total_amount) }),
           {
             parse_mode: 'Markdown',
-            reply_markup: {
-              inline_keyboard: [[{ text: '🌟 Открыть Mini App', web_app: { url: MINI_APP_URL } }]],
-            },
+            reply_markup: paymentChartKeyboard(user),
           }
         );
         return;
@@ -77,31 +74,24 @@ export function registerPaymentHandlers(bot: Bot): void {
 
       const user = getUserByTelegramId(telegramId);
       const expiresDate = user?.subscription_expires
-        ? new Date(user.subscription_expires).toLocaleDateString('ru-RU', {
-            day: 'numeric', month: 'long', year: 'numeric',
-          })
-        : '30 дней';
+        ? formatLocalizedDate(user, user.subscription_expires)
+        : tUser(user, 'common.days_30');
 
       await ctx.reply(
-        `🎉 *Добро пожаловать в AstroGuru Premium!*\n\n` +
-        `✅ Оплата: *${payment.total_amount} ⭐*\n` +
-        `📅 Подписка активна до: *${expiresDate}*\n` +
-        `🔄 Автопродление: *${SUBSCRIPTION_PRICE} ⭐/мес*\n` +
-        `Отменить: /cancel или в профиле Mini App\n\n` +
-        `🌟 Доступно: персональный гороскоп, транзиты, натальная карта, месячный прогноз`,
+        tUser(user, 'payment.premium_welcome', {
+          amount: String(payment.total_amount),
+          date: expiresDate,
+          price: String(SUBSCRIPTION_PRICE),
+        }),
         {
           parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🔮 Получить гороскоп', callback_data: 'horoscope_today' }],
-              [{ text: '🌟 Открыть Mini App', web_app: { url: MINI_APP_URL } }],
-            ],
-          },
+          reply_markup: paymentPremiumKeyboard(user),
         }
       );
     } catch (error) {
       logger.error('Failed to process payment', { error, telegramId });
-      await ctx.reply('❌ Ошибка активации. Напишите natesally@yandex.com с чеком об оплате.');
+      const user = getUserByTelegramId(telegramId);
+      await ctx.reply(tUser(user, 'payment.activation_error'));
     }
   });
 }

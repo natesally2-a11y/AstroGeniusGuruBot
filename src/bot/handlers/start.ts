@@ -1,96 +1,75 @@
-import { Bot, InlineKeyboard } from 'grammy';
-import { getUserByTelegramId } from '../../database/queries';
+import { Bot } from 'grammy';
+import { getUserByTelegramId, setUserReferralSource } from '../../database/queries';
 import { hasNatalChartAccess } from '../../payments/stars';
-import { BOT_FEATURES_GUIDE } from '../helpers/messages';
+import { getGuideText, getUserLang, tUser } from '../../i18n';
+import { sendWelcomeMessages } from '../helpers/welcome';
 import { formatLuckyDayMessage } from '../../astrology/lucky';
+import { birthDatePromptKeyboard, compatAppKeyboard, openChartKeyboard } from '../helpers/keyboards';
 import { logger } from '../../utils/logger';
 
-const MINI_APP_URL = process.env.MINI_APP_URL || 'https://astroguru-production.up.railway.app/app';
+function parseStartPayload(text: string | undefined): string | null {
+  if (!text?.startsWith('/start')) return null;
+  const parts = text.trim().split(/\s+/);
+  return parts[1]?.slice(0, 64) || null;
+}
 
 export function registerStartHandler(bot: Bot): void {
   bot.command('start', async (ctx) => {
-    const telegramId = ctx.from!.id;
-    const user = getUserByTelegramId(telegramId);
-    const firstName = ctx.from!.first_name;
+    logger.info(`/start from ${ctx.from!.id}`);
+    if ((ctx as typeof ctx & { welcomed?: boolean }).welcomed) return;
 
-    logger.info(`/start from ${telegramId}`);
-
-    const keyboard = new InlineKeyboard()
-      .webApp('🌟 Открыть AstroGuru', MINI_APP_URL).row()
-      .text('🔮 Гороскоп', 'horoscope_today').text('🌙 Луна', 'moon_phase').row()
-      .text('⭐ Premium', 'subscribe_info').text('🍀 Удача', 'lucky_day').row()
-      .text('📊 Натальная карта', 'natal_chart').text('💑 Совместимость', 'compatibility').row()
-      .text('📚 Все команды', 'show_commands').text('⚙️ Настройки', 'settings_menu');
-
-    if (!user?.birth_date) {
-      await ctx.reply(
-        `✨ *Добро пожаловать в AstroGuru, ${firstName}!*\n\n` +
-        `Я — ваш личный астролог. Рассчитываю натальную карту, гороскопы и транзиты по вашим данным рождения.\n\n` +
-        `👇 *Начните с даты рождения*, затем изучите все функции:`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: new InlineKeyboard()
-            .text('📅 Указать дату рождения', 'edit_birth_date').row()
-            .webApp('🌟 Открыть приложение', MINI_APP_URL).row()
-            .text('📚 Все команды бота', 'show_commands'),
-        }
-      );
-      await ctx.reply(BOT_FEATURES_GUIDE, { parse_mode: 'Markdown' });
-    } else {
-      await ctx.reply(
-        `🌟 *С возвращением, ${firstName}!*\n\n` +
-        `Выберите действие на клавиатуре или смотрите все команды ниже 👇`,
-        { parse_mode: 'Markdown', reply_markup: keyboard }
-      );
-      await ctx.reply(BOT_FEATURES_GUIDE, { parse_mode: 'Markdown' });
+    const payload = parseStartPayload(ctx.message?.text);
+    if (payload) {
+      setUserReferralSource(ctx.from!.id, payload);
+      logger.info(`Start payload: ${payload} from ${ctx.from!.id}`);
     }
+
+    await sendWelcomeMessages(ctx, undefined, payload);
   });
 
   bot.callbackQuery('show_commands', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
-    await ctx.reply(BOT_FEATURES_GUIDE, { parse_mode: 'Markdown' });
+    const user = getUserByTelegramId(ctx.from.id);
+    await ctx.reply(getGuideText(getUserLang(user)), { parse_mode: 'Markdown' });
   });
 
   bot.callbackQuery('lucky_day', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     const user = getUserByTelegramId(ctx.from.id);
-    await ctx.reply(formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
+    await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
+    await ctx.reply(await formatLuckyDayMessage(user), { parse_mode: 'Markdown' });
   });
 
   bot.callbackQuery('natal_chart', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     const user = getUserByTelegramId(ctx.from.id);
     if (!user?.birth_date) {
-      await ctx.reply('📅 Сначала укажите дату рождения: /settings');
+      await ctx.reply(tUser(user, 'settings.birth_required'));
       return;
     }
     if (!hasNatalChartAccess(user)) {
-      await ctx.reply(
-        '🔒 Натальная карта доступна в *Premium* или разово за 99 ⭐\n\n/subscribe или /buy_chart',
-        { parse_mode: 'Markdown' }
-      );
+      await ctx.reply(tUser(user, 'start.natal_locked'), { parse_mode: 'Markdown' });
       return;
     }
-    await ctx.reply('📊 Ваша натальная карта с домами и аспектами:', {
-      reply_markup: new InlineKeyboard().webApp('🌟 Открыть карту', MINI_APP_URL),
+    await ctx.reply(tUser(user, 'start.natal_open'), {
+      reply_markup: openChartKeyboard(user),
     });
   });
 
   bot.callbackQuery('compatibility', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
-    await ctx.reply('💑 Проверьте совместимость знаков в Mini App:', {
-      reply_markup: new InlineKeyboard().webApp('💑 Совместимость', MINI_APP_URL),
+    const user = getUserByTelegramId(ctx.from.id);
+    await ctx.reply(tUser(user, 'start.compat_prompt'), {
+      reply_markup: compatAppKeyboard(getUserByTelegramId(ctx.from.id)),
     });
   });
 
   bot.callbackQuery('settings_menu', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
-    await ctx.reply(
-      '⚙️ *Настройки данных рождения*\n\nКоманда /settings — укажите дату, время и город рождения для точных расчётов.',
-      {
-        parse_mode: 'Markdown',
-        reply_markup: new InlineKeyboard().text('📅 Указать дату', 'edit_birth_date'),
-      }
-    );
+    const user = getUserByTelegramId(ctx.from.id);
+    await ctx.reply(tUser(user, 'settings.menu'), {
+      parse_mode: 'Markdown',
+      reply_markup: birthDatePromptKeyboard(user),
+    });
   });
 }

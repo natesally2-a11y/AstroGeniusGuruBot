@@ -3,7 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { logger } from '../utils/logger';
 
-const dbPath = process.env.DATABASE_PATH || './data/astroguru.db';
+const dbPath = process.env.DATABASE_PATH ||
+  (process.env.NODE_ENV === 'production' ? '/app/data/astroguru.db' : './data/astroguru.db');
 
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
@@ -107,10 +108,62 @@ export function initializeDatabase(): void {
     `ALTER TABLE users ADD COLUMN natal_chart_unlocked INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN natal_chart_unlocked_until TEXT`,
     `ALTER TABLE payments ADD COLUMN payment_type TEXT DEFAULT 'subscription'`,
+    `ALTER TABLE users ADD COLUMN last_renewal_notice TEXT`,
+    `ALTER TABLE users ADD COLUMN referral_source TEXT`,
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* column exists */ }
   }
 
+  importLegacyDatabaseIfEmpty();
+
   logger.info('Database initialized successfully');
+}
+
+/** Recover users from pre-volume DB path after Railway migration */
+function importLegacyDatabaseIfEmpty(): void {
+  const withBirth = db.prepare(
+    'SELECT COUNT(*) as c FROM users WHERE birth_date IS NOT NULL AND birth_date != \'\''
+  ).get() as { c: number };
+  if (withBirth.c > 0) return;
+
+  const legacyPaths = [
+    path.resolve(process.cwd(), 'data', 'astroguru.db'),
+    path.resolve('/app', 'data', 'astroguru-legacy.db'),
+  ];
+
+  const currentResolved = path.resolve(dbPath);
+  for (const legacyPath of legacyPaths) {
+    if (!fs.existsSync(legacyPath) || path.resolve(legacyPath) === currentResolved) continue;
+    try {
+      db.exec(`ATTACH DATABASE '${legacyPath.replace(/'/g, "''")}' AS legacy`);
+      const legacyCount = db.prepare(
+        'SELECT COUNT(*) as c FROM legacy.users WHERE birth_date IS NOT NULL'
+      ).get() as { c: number };
+      if (legacyCount.c === 0) {
+        db.exec('DETACH DATABASE legacy');
+        continue;
+      }
+      db.exec(`
+        INSERT OR IGNORE INTO users (
+          telegram_id, first_name, last_name, username, birth_date, birth_time,
+          birth_city, birth_lat, birth_lon, timezone, subscription_status,
+          subscription_expires, language_code, daily_horoscope_enabled,
+          auto_renew, natal_chart_unlocked, natal_chart_unlocked_until, created_at, updated_at
+        )
+        SELECT
+          telegram_id, first_name, last_name, username, birth_date, birth_time,
+          birth_city, birth_lat, birth_lon, timezone, subscription_status,
+          subscription_expires, language_code, daily_horoscope_enabled,
+          auto_renew, natal_chart_unlocked, natal_chart_unlocked_until, created_at, updated_at
+        FROM legacy.users
+      `);
+      db.exec('DETACH DATABASE legacy');
+      logger.info(`Imported users from legacy database: ${legacyPath}`);
+      return;
+    } catch (error) {
+      try { db.exec('DETACH DATABASE legacy'); } catch { /* ignore */ }
+      logger.warn(`Legacy DB import failed for ${legacyPath}`, { error });
+    }
+  }
 }

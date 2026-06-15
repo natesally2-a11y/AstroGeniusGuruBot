@@ -78,95 +78,118 @@
 
       <!-- Natal Chart -->
       <div id="tab-chart" class="tab-content">
-        <div class="page-header compact"><h2 class="page-title">Натальная карта</h2></div>
+        <div class="page-header compact"><h2 class="page-title" data-i18n="pageNatalChart">Натальная карта</h2></div>
         <div class="content-area">
           <div id="chart-locked" class="locked-feature" style="display:none">
             <div class="lock-icon">🔒</div>
-            <h3>Натальная карта</h3>
-            <p>Полная карта рождения с AI-интерпретацией всех планет, домов и аспектов. Обновляется каждый месяц.</p>
-            <button class="btn-primary" onclick="app.openSubscribe()">⭐ Premium — 99 ⭐/мес</button>
-            <button class="btn-secondary" style="margin-top:10px" onclick="app.buyNatalChart()">🌌 Разово — 99 ⭐</button>
+            <h3 data-i18n="chartLockedTitle">Натальная карта</h3>
+            <p data-i18n="chartLockedDesc">Полная карта рождения с AI-интерпретацией всех планет, домов и аспектов. Обновляется каждый месяц.</p>
+            <button class="btn-primary" data-i18n="premiumChartBtn" onclick="app.openSubscribe()">⭐ Premium — 99 ⭐/мес</button>
+            <button class="btn-secondary" style="margin-top:10px" data-i18n="buyChartOnce" onclick="app.buyNatalChart()">🌌 Разово — 99 ⭐</button>
+          </div>
+          <div id="chart-birth-missing" class="locked-feature" style="display:none">
+            <div class="lock-icon">📅</div>
+            <h3 data-i18n="chartBirthTitle">Нужны данные рождения</h3>
+            <p data-i18n="chartBirthDesc">Укажите дату, время и город в боте через /settings — данные сохранятся и подтянутся сюда автоматически.</p>
+            <button class="btn-primary" data-i18n="openBot" onclick="app.openSettings()">⚙️ Указать в боте</button>
+            <button class="btn-secondary" style="margin-top:10px" data-i18n="refreshData" onclick="app.refreshAndLoadChart()">🔄 Обновить данные</button>
           </div>
           <div id="chart-container" style="display:none">
             <div class="natal-chart-wrapper">
               <canvas id="natal-chart-canvas" width="340" height="340"></canvas>
             </div>
             <div id="planets-list" class="planets-grid"></div>
-            <div id="chart-interpretation" class="horoscope-card" style="margin-top:12px"></div>
+            <div id="chart-decode-panel" class="decode-panel" style="display:none">
+              <p id="decode-summary" class="decode-summary"></p>
+              <div id="decode-balance" class="decode-balance"></div>
+              <div id="decode-tabs" class="decode-tabs"></div>
+              <div id="decode-content" class="decode-content horoscope-card"></div>
+            </div>
+            <div id="chart-interpretation" class="horoscope-card" style="display:none;margin-top:12px"></div>
           </div>
         </div>
       </div>
 
       <!-- Compatibility -->
       <div id="tab-compat" class="tab-content">
-        <div class="page-header compact"><h2 class="page-title">Совместимость</h2></div>
+        <div class="page-header compact"><h2 class="page-title" data-i18n="pageCompat">Совместимость</h2></div>
         <div class="content-area">
           <div class="compat-selector">
             <div class="sign-picker">
-              <label>Ваш знак</label>
-              <select id="sign1-select" class="sign-select"><option value="">Выберите знак</option></select>
+              <label data-i18n="yourSign">Ваш знак</label>
+              <select id="sign1-select" class="sign-select"><option value="" data-i18n="selectSign">Выберите знак</option></select>
             </div>
             <div class="compat-heart">💕</div>
             <div class="sign-picker">
-              <label>Партнёр</label>
-              <select id="sign2-select" class="sign-select"><option value="">Выберите знак</option></select>
+              <label data-i18n="partner">Партнёр</label>
+              <select id="sign2-select" class="sign-select"><option value="" data-i18n="selectSign">Выберите знак</option></select>
             </div>
           </div>
-          <button class="btn-primary" onclick="app.checkCompatibility()" id="compat-btn">Проверить совместимость</button>
+          <button class="btn-primary" data-i18n="checkCompat" onclick="app.checkCompatibility()" id="compat-btn">Проверить совместимость</button>
           <div id="compat-result" class="compat-result" style="display:none"></div>
         </div>
       </div>
 
       <!-- Profile -->
       <div id="tab-profile" class="tab-content">
-        <div class="page-header compact"><h2 class="page-title">Профиль</h2></div>
+        <div class="page-header compact"><h2 class="page-title" data-i18n="pageProfile">Профиль</h2></div>
         <div class="content-area">
           <div class="profile-card">
             <div class="profile-avatar" id="profile-avatar">✨</div>
-            <div class="profile-name" id="profile-name">Загрузка...</div>
+            <div class="profile-name" id="profile-name" data-i18n="loading">Загрузка...</div>
             <div class="profile-sub-status" id="profile-sub-status"></div>
           </div>
 
           <div class="settings-section">
-            <h3 class="section-title">Данные рождения</h3>
-            <div class="info-row"><span class="info-icon">📅</span><span class="info-label">Дата</span><span class="info-value" id="prof-birth-date">—</span></div>
-            <div class="info-row"><span class="info-icon">🕐</span><span class="info-label">Время</span><span class="info-value" id="prof-birth-time">—</span></div>
-            <div class="info-row"><span class="info-icon">🏙️</span><span class="info-label">Город</span><span class="info-value" id="prof-birth-city">—</span></div>
+            <h3 class="section-title" data-i18n="birthData">Данные рождения</h3>
+            <div class="info-row"><span class="info-icon">📅</span><span class="info-label" data-i18n="date">Дата</span><span class="info-value" id="prof-birth-date">—</span></div>
+            <div class="info-row"><span class="info-icon">🕐</span><span class="info-label" data-i18n="time">Время</span><span class="info-value" id="prof-birth-time">—</span></div>
+            <div class="info-row"><span class="info-icon">🏙️</span><span class="info-label" data-i18n="city">Город</span><span class="info-value" id="prof-birth-city">—</span></div>
           </div>
 
           <div class="settings-section" id="sub-section">
-            <h3 class="section-title">Подписка</h3>
+            <h3 class="section-title" data-i18n="subscription">Подписка</h3>
             <div id="sub-details" class="sub-info"></div>
-            <p class="sub-terms-hint" style="font-size:12px;color:var(--tg-hint);margin:8px 0">
+            <p class="sub-terms-hint" data-i18n="subTerms" style="font-size:12px;color:var(--tg-hint);margin:8px 0">
               99 ⭐/мес · автосписание · отмена в любой момент · действует до конца периода
             </p>
-            <button class="btn-subscribe" id="sub-btn" onclick="app.openSubscribe()">⭐ Premium — 99 ⭐/мес</button>
-            <button class="btn-secondary" id="cancel-sub-btn" style="display:none;margin-top:8px" onclick="app.cancelSubscription()">❌ Отменить автопродление</button>
+            <button class="btn-subscribe" id="sub-btn" data-i18n="premiumBtn" onclick="app.openSubscribe()">⭐ Premium — 99 ⭐/мес</button>
+            <button class="btn-secondary" id="cancel-sub-btn" data-i18n="cancelAutoRenew" style="display:none;margin-top:8px" onclick="app.cancelSubscription()">❌ Отменить автопродление</button>
           </div>
 
           <div class="settings-section">
-            <h3 class="section-title">Разовые покупки</h3>
-            <button class="btn-secondary" onclick="app.buyNatalChart()">🌌 Натальная карта — 99 ⭐</button>
+            <h3 class="section-title" data-i18n="oneTimePurchases">Разовые покупки</h3>
+            <button class="btn-secondary" id="buy-chart-btn" data-i18n="natalChartBtn" onclick="app.buyNatalChart()">🌌 Натальная карта — 99 ⭐</button>
           </div>
 
           <div class="settings-section">
-            <h3 class="section-title">Быстрые действия</h3>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/today')">🔮 Гороскоп на сегодня</button>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/settings')">⚙️ Изменить данные рождения</button>
-            <button class="btn-secondary" onclick="app.showLuckyDay()">🍀 Счастливый день</button>
-            <button class="btn-secondary" onclick="app.showTransits()">🪐 Влияние планет сегодня</button>
-            <button class="btn-secondary" onclick="app.sendBotCommand('/moon')">🌙 Фаза луны</button>
+            <h3 class="section-title" data-i18n="quickActions">Быстрые действия</h3>
+            <button class="btn-secondary" data-i18n="horoscopeToday" onclick="app.sendBotCommand('/today')">🔮 Гороскоп на сегодня</button>
+            <button class="btn-secondary" data-i18n="changeBirth" onclick="app.sendBotCommand('/settings')">⚙️ Изменить данные рождения</button>
+            <button class="btn-secondary" data-i18n="luckyDayAction" onclick="app.showLuckyDay()">🍀 Счастливый день</button>
+            <button class="btn-secondary" data-i18n="transitsAction" onclick="app.showTransits()">🪐 Влияние планет сегодня</button>
+            <button class="btn-secondary" data-i18n="moonPhase" onclick="app.sendBotCommand('/moon')">🌙 Фаза луны</button>
             <div id="profile-action-result" class="action-result-card" style="display:none"></div>
           </div>
 
           <div class="settings-section">
-            <h3 class="section-title">Документы</h3>
-            <button class="btn-secondary" onclick="app.openPrivacy()">📄 Политика конфиденциальности</button>
+            <h3 class="section-title" data-i18n="documents">Документы</h3>
+            <button class="btn-secondary" data-i18n="privacy" onclick="app.openPrivacy()">📄 Политика конфиденциальности</button>
           </div>
         </div>
       </div>
     </div>
+
+    <div id="ai-loading-overlay" class="ai-loading-overlay" aria-hidden="true">
+      <div class="ai-loading-card">
+        <div class="ai-loading-orbit">✨</div>
+        <div class="ai-loading-spinner"></div>
+        <p class="ai-loading-title" id="ai-loading-title">ИИ составляет прогноз</p>
+        <p class="ai-loading-hint" id="ai-loading-hint">Анализируем натальную карту и транзиты...</p>
+        <div class="ai-loading-dots"><span></span><span></span><span></span></div>
+      </div>
+    </div>
   </div>
-  <script src="app.js"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>

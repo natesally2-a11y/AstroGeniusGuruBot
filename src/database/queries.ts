@@ -1,4 +1,5 @@
 import { db } from './setup';
+import { PENDING_LANGUAGE } from '../i18n/languages';
 
 export interface User {
   id: number;
@@ -16,9 +17,11 @@ export interface User {
   subscription_expires?: string;
   language_code: string;
   daily_horoscope_enabled: number;
+  referral_source?: string;
   auto_renew?: number;
   natal_chart_unlocked?: number;
   natal_chart_unlocked_until?: string;
+  last_renewal_notice?: string;
   created_at: string;
   updated_at: string;
 }
@@ -89,8 +92,22 @@ export function createUser(data: {
     INSERT INTO users (telegram_id, first_name, last_name, username, language_code)
     VALUES (@telegram_id, @first_name, @last_name, @username, @language_code)
   `);
-  stmt.run(data);
+  stmt.run({ ...data, language_code: data.language_code ?? PENDING_LANGUAGE });
   return getUserByTelegramId(data.telegram_id) as User;
+}
+
+export function setUserLanguage(telegramId: number, languageCode: string): void {
+  db.prepare(`
+    UPDATE users SET language_code = @language_code, updated_at = datetime('now')
+    WHERE telegram_id = @telegram_id
+  `).run({ telegram_id: telegramId, language_code: languageCode });
+}
+
+export function setUserReferralSource(telegramId: number, source: string): void {
+  db.prepare(`
+    UPDATE users SET referral_source = @source, updated_at = datetime('now')
+    WHERE telegram_id = @telegram_id AND (referral_source IS NULL OR referral_source = '')
+  `).run({ telegram_id: telegramId, source: source.slice(0, 64) });
 }
 
 export function updateUserBirthData(telegramId: number, data: {
@@ -112,6 +129,43 @@ export function updateUserBirthData(telegramId: number, data: {
       updated_at = datetime('now')
     WHERE telegram_id = @telegram_id
   `).run({ ...data, telegram_id: telegramId });
+}
+
+/** Merge partial birth data — keeps existing fields when not provided */
+export function patchUserBirthData(telegramId: number, data: {
+  birth_date?: string;
+  birth_time?: string;
+  birth_city?: string;
+  birth_lat?: number;
+  birth_lon?: number;
+  timezone?: string;
+}): void {
+  const user = getUserByTelegramId(telegramId);
+  if (!user) return;
+
+  const merged = {
+    birth_date: data.birth_date ?? user.birth_date,
+    birth_time: data.birth_time !== undefined ? data.birth_time : user.birth_time,
+    birth_city: data.birth_city !== undefined ? data.birth_city : user.birth_city,
+    birth_lat: data.birth_lat !== undefined ? data.birth_lat : user.birth_lat,
+    birth_lon: data.birth_lon !== undefined ? data.birth_lon : user.birth_lon,
+    timezone: data.timezone ?? user.timezone,
+    telegram_id: telegramId,
+  };
+
+  if (!merged.birth_date) return;
+
+  db.prepare(`
+    UPDATE users SET
+      birth_date = @birth_date,
+      birth_time = @birth_time,
+      birth_city = @birth_city,
+      birth_lat = @birth_lat,
+      birth_lon = @birth_lon,
+      timezone = COALESCE(@timezone, timezone),
+      updated_at = datetime('now')
+    WHERE telegram_id = @telegram_id
+  `).run(merged);
 }
 
 export function updateSubscription(telegramId: number, status: 'free' | 'premium', expiresAt?: string): void {
@@ -176,6 +230,32 @@ export function migrateLegacyPremiumUsers(): number {
     AND (subscription_expires IS NULL OR subscription_expires > datetime('now'))
   `).run();
   return result.changes;
+}
+
+export function getUsersForRenewalReminder(): User[] {
+  return db.prepare(`
+    SELECT * FROM users
+    WHERE subscription_status = 'premium'
+    AND auto_renew = 1
+    AND subscription_expires IS NOT NULL
+    AND subscription_expires > datetime('now')
+    AND subscription_expires <= datetime('now', '+3 days')
+    AND (last_renewal_notice IS NULL OR last_renewal_notice != subscription_expires)
+  `).all() as User[];
+}
+
+export function markRenewalNoticeSent(telegramId: number, subscriptionExpires: string): void {
+  db.prepare(`
+    UPDATE users SET last_renewal_notice = @expires, updated_at = datetime('now')
+    WHERE telegram_id = @telegram_id
+  `).run({ expires: subscriptionExpires, telegram_id: telegramId });
+}
+
+export function clearRenewalNotice(telegramId: number): void {
+  db.prepare(`
+    UPDATE users SET last_renewal_notice = NULL, updated_at = datetime('now')
+    WHERE telegram_id = @telegram_id
+  `).run({ telegram_id: telegramId });
 }
 
 export function getAllActiveSubscribers(): User[] {

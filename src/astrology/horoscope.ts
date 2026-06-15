@@ -6,136 +6,30 @@ import {
 import { User } from '../database/queries';
 import { isSubscriptionActive } from '../payments/stars';
 import { generateAstrologyText } from '../ai/llm';
+import { getUserLang, t } from '../i18n';
+import { translateSign, translateMoonPhase } from '../i18n/astro';
+import {
+  getPlanetMeaning, getSignTheme, getLuckyColor, getWeeklyAreas, getDateLocale,
+} from '../i18n/horoscopeContent';
+import {
+  formatUserLocalDate, getUserLocalDateParts, resolveUserTimezone,
+} from './timezone';
 import { getMoonPhase } from './features';
+import { DateTime } from 'luxon';
 
-// ─── Planet descriptions ──────────────────────────────────────────────────────
+function getMoonPhaseForUserDay(
+  user: { timezone?: string | null },
+  parts: { year: number; month: number; day: number }
+) {
+  const tz = resolveUserTimezone(user.timezone);
+  const utc = DateTime.fromObject(
+    { year: parts.year, month: parts.month, day: parts.day, hour: 12, minute: 0 },
+    { zone: tz }
+  ).toUTC();
+  return getMoonPhase(new Date(Date.UTC(utc.year, utc.month - 1, utc.day, utc.hour, utc.minute)));
+}
 
-const PLANET_MEANINGS: Record<string, Record<string, string>> = {
-  sun: {
-    conjunction: 'Солнце усиливает вашу жизненную силу и самовыражение',
-    trine: 'Солнечная энергия гармонично поддерживает ваши цели',
-    sextile: 'Благоприятное время для творчества и лидерства',
-    opposition: 'Возможен конфликт между личными желаниями и внешними обстоятельствами',
-    square: 'Требуется усилие для преодоления препятствий',
-  },
-  moon: {
-    conjunction: 'Эмоции обострены, интуиция на высоте',
-    trine: 'Внутренняя гармония и эмоциональный баланс',
-    sextile: 'Хорошее время для семейных дел и общения',
-    opposition: 'Эмоциональные качели, возможны недопонимания',
-    square: 'Эмоциональная напряжённость требует осторожности',
-  },
-  mercury: {
-    conjunction: 'Ум обострён, общение и переговоры пройдут успешно',
-    trine: 'Мысли ясны, документы и договоры благоприятны',
-    sextile: 'Удачное время для обучения и коммуникаций',
-    opposition: 'Возможны разногласия, дважды проверяйте информацию',
-    square: 'Будьте внимательны в договорах и общении',
-  },
-  venus: {
-    conjunction: 'Любовь и гармония в отношениях усилены',
-    trine: 'Привлекательность и обаяние на высоте',
-    sextile: 'Благоприятно для романтики и финансов',
-    opposition: 'Возможны разочарования в отношениях',
-    square: 'Финансовые вопросы требуют осторожности',
-  },
-  mars: {
-    conjunction: 'Энергия и амбиции на пике, действуйте решительно',
-    trine: 'Физические усилия вознаграждаются, спорт благоприятен',
-    sextile: 'Хороший день для активных действий и инициативы',
-    opposition: 'Избегайте конфликтов, контролируйте агрессию',
-    square: 'Будьте осторожны с импульсивными решениями',
-  },
-  jupiter: {
-    conjunction: 'Удача улыбается, благоприятно для расширения и роста',
-    trine: 'Великолепное время для новых начинаний и путешествий',
-    sextile: 'Возможности для роста и процветания открыты',
-    opposition: 'Не переоценивайте свои силы',
-    square: 'Избегайте чрезмерного оптимизма',
-  },
-  saturn: {
-    conjunction: 'Время работы и ответственности, будьте дисциплинированы',
-    trine: 'Структура и порядок помогают достичь целей',
-    sextile: 'Практические усилия принесут плоды',
-    opposition: 'Возможны задержки и ограничения',
-    square: 'Терпение и настойчивость — ваши союзники',
-  },
-};
-
-const SIGN_DAILY_THEMES: Record<ZodiacSign, string[]> = {
-  'Овен': [
-    'Ваша энергия неукротима — направьте её в нужное русло',
-    'День для смелых решений и новых начинаний',
-    'Лидерские качества помогут вам сегодня',
-    'Действуйте интуитивно, не раздумывая слишком долго',
-  ],
-  'Телец': [
-    'Стабильность и комфорт — ваши главные союзники',
-    'День благоприятен для финансовых решений',
-    'Наслаждайтесь красотой жизни и маленькими радостями',
-    'Терпение принесёт долгожданные результаты',
-  ],
-  'Близнецы': [
-    'Общительность и остроумие открывают двери',
-    'Информация — ваш ресурс сегодня',
-    'Не распыляйтесь — сфокусируйтесь на главном',
-    'Лёгкость в общении поможет решить трудные вопросы',
-  ],
-  'Рак': [
-    'Интуиция сильна, доверяйте своим ощущениям',
-    'Дом и семья приносят особую радость сегодня',
-    'Эмоциональная поддержка близких укрепляет вас',
-    'Прислушайтесь к снам и внутренним сигналам',
-  ],
-  'Лев': [
-    'Сияйте — сегодня ваш день для самовыражения',
-    'Творчество и искусство вдохновляют вас',
-    'Признание заслуг не заставит себя ждать',
-    'Щедрость и великодушие привлекают удачу',
-  ],
-  'Дева': [
-    'Внимание к деталям принесёт отличные результаты',
-    'Анализ и планирование — ваши сильные стороны',
-    'День для наведения порядка и систематизации',
-    'Здоровье и рутина требуют внимания',
-  ],
-  'Весы': [
-    'Гармония и баланс — ключ к успеху дня',
-    'Переговоры и дипломатия в вашу пользу',
-    'Красота и искусство наполняют душу',
-    'Справедливое решение найдётся само',
-  ],
-  'Скорпион': [
-    'Глубина восприятия помогает раскрыть тайны',
-    'Трансформация открывает новые возможности',
-    'Интуиция на высоте — доверяйте ей',
-    'Страсть и целеустремлённость ведут к победе',
-  ],
-  'Стрелец': [
-    'Оптимизм и открытость привлекают удачу',
-    'День для путешествий и новых открытий',
-    'Философские размышления обогащают мировоззрение',
-    'Расширяйте горизонты — возможности безграничны',
-  ],
-  'Козерог': [
-    'Дисциплина и амбиции ведут к вершинам',
-    'Практичный подход принесёт стабильный результат',
-    'Карьерные вопросы решаются успешно',
-    'Терпение и упорство — ваши лучшие качества',
-  ],
-  'Водолей': [
-    'Оригинальность мышления удивляет окружающих',
-    'День для инноваций и нестандартных решений',
-    'Дружба и командная работа усиливают вас',
-    'Следуйте своей уникальной дороге',
-  ],
-  'Рыбы': [
-    'Чуткость и сострадание открывают сердца',
-    'Творческое вдохновение достигает пика',
-    'Медитация и уединение восстанавливают силы',
-    'Мечты подсказывают правильный путь',
-  ],
-};
+// ─── Lucky numbers (internal keys use Russian sign names) ─────────────────────
 
 const LUCKY_NUMBERS: Record<ZodiacSign, number[]> = {
   'Овен': [1, 9, 17], 'Телец': [2, 6, 24], 'Близнецы': [3, 12, 21],
@@ -144,35 +38,30 @@ const LUCKY_NUMBERS: Record<ZodiacSign, number[]> = {
   'Козерог': [2, 8, 26], 'Водолей': [4, 11, 22], 'Рыбы': [3, 9, 12],
 };
 
-const LUCKY_COLORS: Record<ZodiacSign, string> = {
-  'Овен': 'красный', 'Телец': 'зелёный', 'Близнецы': 'жёлтый',
-  'Рак': 'серебристый', 'Лев': 'золотой', 'Дева': 'бежевый',
-  'Весы': 'голубой', 'Скорпион': 'тёмно-красный', 'Стрелец': 'фиолетовый',
-  'Козерог': 'тёмно-синий', 'Водолей': 'бирюзовый', 'Рыбы': 'морской',
-};
-
 // ─── Free horoscope (sun sign only) ──────────────────────────────────────────
 
-export function generateFreeHoroscope(sunSign: ZodiacSign, date: Date): string {
-  const themes = SIGN_DAILY_THEMES[sunSign];
-  // Use date as seed for pseudo-random but deterministic selection
-  const seed = date.getDate() + date.getMonth() * 31;
-  const theme = themes[seed % themes.length];
+export function generateFreeHoroscope(
+  sunSign: ZodiacSign,
+  parts: { year: number; month: number; day: number },
+  dateStr: string,
+  lang = getUserLang(null)
+): string {
+  const seed = parts.day + parts.month * 31;
+  const theme = getSignTheme(lang, sunSign, seed);
   const numbers = LUCKY_NUMBERS[sunSign];
-  const color = LUCKY_COLORS[sunSign];
+  const color = getLuckyColor(lang, sunSign);
   const emoji = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(sunSign)];
+  const sign = translateSign(lang, sunSign);
 
-  const dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-
-  return `${emoji} *Гороскоп для ${sunSign}*
+  return `${emoji} *${t(lang, 'horoscope.free_title', { sign })}*
 📅 ${dateStr}
 
 ${theme}
 
-🍀 *Счастливые числа:* ${numbers.join(', ')}
-🎨 *Благоприятный цвет:* ${color}
+${t(lang, 'horoscope.free_lucky_numbers', { numbers: numbers.join(', ') })}
+${t(lang, 'horoscope.free_lucky_color', { color })}
 
-_Для персонализированного гороскопа на основе вашей натальной карты оформите подписку Premium!_ ✨`;
+${t(lang, 'horoscope.free_premium_cta')}`;
 }
 
 // ─── Premium personalized horoscope ──────────────────────────────────────────
@@ -181,8 +70,10 @@ export function generatePremiumHoroscope(
   user: User,
   natalChart: NatalChartData,
   transits: Transit[],
-  date: Date
+  dateStr: string,
+  parts: { year: number; month: number; day: number }
 ): string {
+  const lang = getUserLang(user);
   const sunSign = natalChart.sun.sign;
   const moonSign = natalChart.moon.sign;
   const risingSign = natalChart.ascendant.sign;
@@ -190,114 +81,131 @@ export function generatePremiumHoroscope(
   const moonEmoji = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(moonSign)];
   const risingEmoji = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(risingSign)];
 
-  const dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-
-  // Get top 3 most significant transits
-  const harmonious = transits.filter(t => t.energy === 'harmonious').slice(0, 2);
-  const challenging = transits.filter(t => t.energy === 'challenging').slice(0, 1);
+  const harmonious = transits.filter(tr => tr.energy === 'harmonious').slice(0, 2);
+  const challenging = transits.filter(tr => tr.energy === 'challenging').slice(0, 1);
 
   let transitText = '';
-  for (const t of harmonious) {
-    const meaning = PLANET_MEANINGS[t.transitPlanet]?.[t.aspectType] || '';
+  for (const tr of harmonious) {
+    const meaning = getPlanetMeaning(lang, tr.transitPlanet, tr.aspectType);
     if (meaning) transitText += `✅ ${meaning}\n`;
   }
-  for (const t of challenging) {
-    const meaning = PLANET_MEANINGS[t.transitPlanet]?.[t.aspectType] || '';
+  for (const tr of challenging) {
+    const meaning = getPlanetMeaning(lang, tr.transitPlanet, tr.aspectType);
     if (meaning) transitText += `⚠️ ${meaning}\n`;
   }
 
   if (!transitText) {
-    const themes = SIGN_DAILY_THEMES[sunSign];
-    const seed = date.getDate() + date.getMonth() * 31;
-    transitText = `✨ ${themes[seed % themes.length]}\n`;
+    const seed = parts.day + parts.month * 31;
+    transitText = `✨ ${getSignTheme(lang, sunSign, seed)}\n`;
   }
 
   const numbers = LUCKY_NUMBERS[sunSign];
-  const color = LUCKY_COLORS[sunSign];
-
-  // Overall energy score (1-10)
-  const harmoniousCount = transits.filter(t => t.energy === 'harmonious').length;
-  const challengingCount = transits.filter(t => t.energy === 'challenging').length;
+  const color = getLuckyColor(lang, sunSign);
+  const harmoniousCount = transits.filter(tr => tr.energy === 'harmonious').length;
+  const challengingCount = transits.filter(tr => tr.energy === 'challenging').length;
   const energyScore = Math.min(10, Math.max(1, 5 + harmoniousCount - challengingCount));
   const energyBar = '⭐'.repeat(energyScore) + '☆'.repeat(10 - energyScore);
 
-  return `🌟 *Персональный гороскоп*
+  return `🌟 *${t(lang, 'horoscope.premium_title')}*
 📅 ${dateStr}
 
-${sunEmoji} Солнце в *${sunSign}* · ${moonEmoji} Луна в *${moonSign}* · ${risingEmoji} Асцендент *${risingSign}*
+${t(lang, 'horoscope.premium_triad', {
+  sunEmoji, moonEmoji, risingEmoji,
+  sun: translateSign(lang, sunSign),
+  moon: translateSign(lang, moonSign),
+  rising: translateSign(lang, risingSign),
+})}
 
-*Энергетика дня:*
+${t(lang, 'horoscope.premium_energy')}
 ${energyBar}
 
-*Планетарные влияния:*
+${t(lang, 'horoscope.premium_transits')}
 ${transitText.trim()}
 
-🍀 *Счастливые числа:* ${numbers.join(', ')}
-🎨 *Благоприятный цвет:* ${color}
+${t(lang, 'horoscope.premium_lucky_numbers', { numbers: numbers.join(', ') })}
+${t(lang, 'horoscope.premium_lucky_color', { color })}
 
-💫 _Полная натальная карта и совместимость доступны в Mini App_`;
+${t(lang, 'horoscope.premium_footer')}`;
 }
 
 // ─── Generate horoscope for user ──────────────────────────────────────────────
 
-export async function generateDailyHoroscope(
-  user: User,
-  date?: Date,
-  useAi = true
-): Promise<string> {
-  const today = date || new Date();
+export async function generateDailyHoroscope(user: User, useAi = true): Promise<string> {
+  const lang = getUserLang(user);
+  const todayParts = getUserLocalDateParts(user);
+  const dateStr = formatUserLocalDate(user);
 
   if (!user.birth_date) {
-    return '🔮 Для получения персонального гороскопа введите дату рождения командой /settings';
+    return t(lang, 'settings.birth_required');
   }
 
   const { year, month, day } = parseBirthDate(user.birth_date);
   const lat = user.birth_lat || 0;
   const lon = user.birth_lon || 0;
-  const tz = user.timezone || 'Europe/Moscow';
+  const tz = resolveUserTimezone(user.timezone);
+  const moonLine = (moon: ReturnType<typeof getMoonPhaseForUserDay>) =>
+    t(lang, 'horoscope.moon_line', {
+      emoji: moon.emoji,
+      phase: translateMoonPhase(lang, moon.phase),
+      sign: translateSign(lang, moon.sign),
+    });
 
   if (!isSubscriptionActive(user)) {
     const jd = toJulianDay(year, month, day, 12, 0);
     const sunPos = calculateSunPosition(jd);
-    const free = generateFreeHoroscope(sunPos.sign, today);
-    const moon = getMoonPhase(today);
-    if (!useAi) return free + `\n\n${moon.emoji} *Луна:* ${moon.phase} в ${moon.sign}`;
+    const free = generateFreeHoroscope(sunPos.sign, todayParts, dateStr, lang);
+    const moon = getMoonPhaseForUserDay(user, todayParts);
+    if (!useAi) return free + `\n\n${moonLine(moon)}`;
     return generateAstrologyText(
-      'Дополни бесплатный гороскоп по солнечному знаку. Кратко, 3-4 предложения.',
-      `Знак: ${sunPos.sign}\nФаза луны: ${moon.phase} в ${moon.sign}\nБазовый текст:\n${free}`,
-      free + `\n\n${moon.emoji} *Луна:* ${moon.phase} в ${moon.sign}`
+      t(lang, 'ai.horoscope_free'),
+      `Sign: ${sunPos.sign}\nMoon: ${moon.phase} in ${moon.sign}\nDate: ${dateStr}\nBase:\n${free}`,
+      free + `\n\n${moonLine(moon)}`,
+      900, 45000, lang
     );
   }
 
   const natalChart = calculateNatalChartForUser(user.birth_date, user.birth_time, lat, lon, tz);
   const transitChart = calculateNatalChart(
-    today.getFullYear(), today.getMonth() + 1, today.getDate(), 12, 0, 0, 0
+    todayParts.year, todayParts.month, todayParts.day, 12, 0, 0, 0
   );
   const transits = calculateTransits(natalChart, transitChart);
-  const fallback = generatePremiumHoroscope(user, natalChart, transits, today);
-  const moon = getMoonPhase(today);
+  const fallback = generatePremiumHoroscope(user, natalChart, transits, dateStr, todayParts);
+  const moon = getMoonPhaseForUserDay(user, todayParts);
 
   if (!useAi) return fallback;
 
   const transitSummary = transits.slice(0, 5).map(t =>
     `${t.transitPlanet} ${t.aspectType} ${t.natalPlanet} (${t.energy})`
   ).join(', ');
+  const numbers = LUCKY_NUMBERS[natalChart.sun.sign];
+  const color = getLuckyColor(lang, natalChart.sun.sign);
 
   return generateAstrologyText(
-    'Создай персональный ежедневный гороскоп на основе натальной карты и транзитов. ' +
-      'Используй Markdown: *жирный*, эмодзи. Структура: энергия дня, транзиты, совет, числа.',
-    `Имя: ${user.first_name}\nСолнце: ${natalChart.sun.sign}, Луна: ${natalChart.moon.sign}, ` +
+    t(lang, 'ai.horoscope_premium'),
+    `Name: ${user.first_name}\nSun: ${natalChart.sun.sign}, Moon: ${natalChart.moon.sign}, ` +
       `Асцендент: ${natalChart.ascendant.sign}\nТранзиты: ${transitSummary}\n` +
-      `Луна сегодня: ${moon.phase} в ${moon.sign}\nДата: ${today.toLocaleDateString('ru-RU')}`,
-    fallback
+      `Луна сегодня: ${moon.phase} в ${moon.sign}\nДата: ${dateStr}\n` +
+      `Числа: ${numbers.join(', ')}, цвет: ${color}`,
+    fallback,
+    1100, 45000, lang
   );
+}
+
+export async function generateTransitForecast(user: User): Promise<string> {
+  if (!user.birth_date) {
+    return t(getUserLang(user), 'settings.birth_required');
+  }
+  const { generateTransitForecastResult } = await import('./transits');
+  const result = await generateTransitForecastResult(user);
+  return result.content;
 }
 
 // ─── Weekly horoscope ─────────────────────────────────────────────────────────
 
 export async function generateWeeklyHoroscope(user: User, useAi = true): Promise<string> {
+  const lang = getUserLang(user);
   if (!user.birth_date) {
-    return '🔮 Для получения гороскопа введите дату рождения командой /settings';
+    return t(lang, 'settings.birth_required');
   }
 
   const lat = user.birth_lat || 0;
@@ -314,56 +222,61 @@ export async function generateWeeklyHoroscope(user: User, useAi = true): Promise
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
 
-  const formatDate = (d: Date) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  const locale = getDateLocale(lang);
+  const formatDate = (d: Date) => d.toLocaleDateString(locale, { day: 'numeric', month: 'long' });
 
-  const areas = ['💼 Карьера', '❤️ Отношения', '💰 Финансы', '🌿 Здоровье', '🌟 Личный рост'];
-  const forecasts = areas.map(area => {
-    const themes = SIGN_DAILY_THEMES[sunSign];
-    const seed = area.length + today.getMonth();
-    return `${area}: ${themes[seed % themes.length]}`;
+  const areas = getWeeklyAreas(lang);
+  const forecasts = areas.map((area, i) => {
+    const seed = area.length + today.getMonth() + i;
+    return `${area}: ${getSignTheme(lang, sunSign, seed)}`;
   });
 
   const numbers = LUCKY_NUMBERS[sunSign];
-  const color = LUCKY_COLORS[sunSign];
+  const color = getLuckyColor(lang, sunSign);
 
-  const fallback = `${sunEmoji} *Недельный гороскоп*
+  const fallback = `${sunEmoji} *${t(lang, 'horoscope.weekly_title')}*
 📅 ${formatDate(weekStart)} – ${formatDate(weekEnd)}
 
 ${forecasts.join('\n\n')}
 
-🍀 *Числа недели:* ${numbers.join(', ')}
-🎨 *Цвет недели:* ${color}
+${t(lang, 'horoscope.weekly_numbers', { numbers: numbers.join(', ') })}
+${t(lang, 'horoscope.weekly_color', { color })}
 
-_Ваше Солнце в ${sunSign}, Луна в ${moonSign}_`;
+${t(lang, 'horoscope.weekly_footer', {
+  sun: translateSign(lang, sunSign),
+  moon: translateSign(lang, moonSign),
+})}`;
 
   if (!useAi) return fallback;
 
   return generateAstrologyText(
-    'Создай недельный астрологический прогноз. Разбей по сферам: карьера, любовь, финансы, здоровье.',
-    `Солнце: ${sunSign}, Луна: ${moonSign}, Асцендент: ${natalChart.ascendant.sign}\n` +
-      `Неделя: ${formatDate(weekStart)} – ${formatDate(weekEnd)}`,
-    fallback
+    t(lang, 'ai.horoscope_weekly'),
+    `Sun: ${sunSign}, Moon: ${moonSign}, Asc: ${natalChart.ascendant.sign}\n` +
+      `Week: ${formatDate(weekStart)} – ${formatDate(weekEnd)}`,
+    fallback, 900, 45000, lang
   );
 }
 
 export async function generateMonthlyHoroscope(user: User): Promise<string> {
+  const lang = getUserLang(user);
   if (!user.birth_date) {
-    return '🔮 Укажите дату рождения в /settings';
+    return t(lang, 'settings.birth_required');
   }
   const tz = user.timezone || 'Europe/Moscow';
   const natalChart = calculateNatalChartForUser(
     user.birth_date, user.birth_time, user.birth_lat || 0, user.birth_lon || 0, tz
   );
   const now = new Date();
-  const monthName = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-  const fallback = `🌙 *Прогноз на ${monthName}*\n\n` +
-    `Солнце в ${natalChart.sun.sign}, Луна в ${natalChart.moon.sign}.\n` +
-    `Месяц благоприятен для развития качеств знака ${natalChart.sun.sign}.`;
+  const monthName = now.toLocaleDateString(getDateLocale(lang), { month: 'long', year: 'numeric' });
+  const sun = translateSign(lang, natalChart.sun.sign);
+  const moon = translateSign(lang, natalChart.moon.sign);
+  const fallback = `🌙 *${t(lang, 'horoscope.monthly_title', { month: monthName })}*\n\n` +
+    t(lang, 'horoscope.monthly_body', { sun, moon });
 
   return generateAstrologyText(
-    'Создай месячный астрологический прогноз с ключевыми датами и рекомендациями.',
-    `Месяц: ${monthName}\nКарта: Солнце ${natalChart.sun.sign}, Луна ${natalChart.moon.sign}, ` +
-      `Асцендент ${natalChart.ascendant.sign}`,
-    fallback
+    t(lang, 'ai.horoscope_monthly'),
+    `Month: ${monthName}\nChart: Sun ${natalChart.sun.sign}, Moon ${natalChart.moon.sign}, ` +
+      `Asc ${natalChart.ascendant.sign}`,
+    fallback, 900, 45000, lang
   );
 }

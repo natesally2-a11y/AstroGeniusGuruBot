@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "verify-public": "node -e \"const fs=require('fs');['app.js','index.html'].forEach(f=>{if(!fs.existsSync('public/'+f))throw new Error('missing public/'+f)});if(!fs.readFileSync('public/app.js','utf8').includes('AstroI18n'))throw new Error('app.js missing i18n')\"",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "watch": "nodemon --exec ts-node src/index.ts",

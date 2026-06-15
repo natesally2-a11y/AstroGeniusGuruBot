@@ -17,8 +17,19 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 async function main(): Promise<void> {
   logger.info('Starting AstroGuru Bot...');
 
+  const { isAiEnabled, getAiConfig } = await import('./ai/llm');
+  const { MINI_APP_URL } = await import('./config/urls');
+  logger.info(`Mini App URL: ${MINI_APP_URL}`);
+  if (isAiEnabled()) {
+    const { model, baseUrl } = getAiConfig();
+    logger.info(`AI enabled: ${model} via ${baseUrl}`);
+  } else {
+    logger.warn('AI disabled — using template horoscopes (set OPENAI_API_KEY for OpenRouter)');
+  }
+
   // Initialize database
   initializeDatabase();
+  logger.info(`Database: ${process.env.DATABASE_PATH || (process.env.NODE_ENV === 'production' ? '/app/data/astroguru.db' : './data/astroguru.db')}`);
 
   // Migrate legacy subscriptions & grant admin lifetime premium
   const { migrateLegacyPremiumUsers } = await import('./database/queries');
@@ -32,6 +43,10 @@ async function main(): Promise<void> {
     grantLifetimePremium(adminId);
     logger.info(`Admin lifetime premium ensured for ${adminId}`);
   }
+
+  const { grantLifetimePremiumToVipAccounts } = await import('./config/vip');
+  const vipGranted = grantLifetimePremiumToVipAccounts();
+  if (vipGranted > 0) logger.info(`Lifetime premium ensured for ${vipGranted} VIP account(s)`);
 
   // Create bot
   const bot = createBot();
@@ -59,8 +74,14 @@ async function main(): Promise<void> {
     logger.info(`Webhook registered at ${webhookPath}`);
   }
 
-  // Static files for Mini App
-  app.use(express.static(path.join(process.cwd(), 'public')));
+  // Static files for Mini App (no long cache — Telegram WebView caches aggressively)
+  app.use(express.static(path.join(process.cwd(), 'public'), {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.js') || filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+    },
+  }));
 
   // API routes for Mini App
   app.use('/api', webappRoutes);
@@ -89,12 +110,12 @@ async function main(): Promise<void> {
     await bot.api.setWebhook(webhookUrl, {
       secret_token: WEBHOOK_SECRET,
       allowed_updates: ['message', 'callback_query', 'pre_checkout_query', 'chat_member'],
-      drop_pending_updates: true,
+      drop_pending_updates: false,
     });
     logger.info(`Webhook set to: ${webhookUrl}`);
   } else {
     // Development: long polling
-    await bot.api.deleteWebhook({ drop_pending_updates: true });
+    await bot.api.deleteWebhook({ drop_pending_updates: false });
     bot.start({
       onStart: (botInfo) => {
         logger.info(`Bot @${botInfo.username} started in polling mode`);

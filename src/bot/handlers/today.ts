@@ -1,11 +1,68 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, Context } from 'grammy';
 import { getUserByTelegramId, saveHoroscope, getHoroscope } from '../../database/queries';
 import { generateDailyHoroscope, generateWeeklyHoroscope } from '../../astrology/horoscope';
 import { isSubscriptionActive } from '../../payments/stars';
-import { getLocalDateKey } from '../../astrology/timezone';
+import { getHoroscopeCacheKey, parseLangFromHoroscopeKey } from '../../astrology/timezone';
+import { editMarkdownSafe, replyMarkdownSafe } from '../helpers/reply';
+import { sanitizeForTelegram } from '../helpers/telegramText';
+import {
+  birthDatePromptKeyboard, horoscopeFollowUpKeyboardForLang,
+  premiumGateKeyboard, weeklyHoroscopeKeyboard,
+} from '../helpers/keyboards';
+import { resolveUserLang, tUser } from '../../i18n';
 import { logger } from '../../utils/logger';
 
-const MINI_APP_URL = process.env.MINI_APP_URL || 'https://yourdomain.com';
+function isBrokenHoroscopeCache(content: string): boolean {
+  if (content.length < 200) return true;
+  if (/###/.test(content)) return true;
+  if (/\*\*/.test(content)) return true;
+  return false;
+}
+
+function resolveHoroscopeLang(ctx: Context, user: NonNullable<ReturnType<typeof getUserByTelegramId>>, dateKey: string) {
+  return parseLangFromHoroscopeKey(dateKey)
+    || resolveUserLang(user, ctx.from?.language_code);
+}
+
+async function sendTodayHoroscope(ctx: Context): Promise<void> {
+  const user = getUserByTelegramId(ctx.from!.id);
+  if (!user?.birth_date) {
+    await ctx.reply(tUser(user, 'settings.birth_required'));
+    return;
+  }
+
+  const dateKey = getHoroscopeCacheKey(user);
+  const cached = getHoroscope(user.id, dateKey);
+  const isPremium = isSubscriptionActive(user);
+  const lang = resolveHoroscopeLang(ctx, user, dateKey);
+  const keyboard = horoscopeFollowUpKeyboardForLang(lang, isPremium);
+
+  if (cached?.content && !isBrokenHoroscopeCache(cached.content)) {
+    await replyMarkdownSafe(ctx, cached.content, { reply_markup: keyboard });
+    return;
+  }
+
+  const loadingMsg = await ctx.reply(
+    `${tUser(user, 'today.loading')}\n\n${tUser(user, 'today.loading_sub')}`,
+    { parse_mode: 'Markdown' }
+  );
+
+  try {
+    const horoscopeText = sanitizeForTelegram(await generateDailyHoroscope(user));
+    if (horoscopeText.length < 120) {
+      throw new Error('Horoscope too short');
+    }
+    saveHoroscope({ user_id: user.id, date: dateKey, content: horoscopeText });
+    await editMarkdownSafe(ctx, loadingMsg.message_id, horoscopeText, { reply_markup: keyboard });
+  } catch (error) {
+    logger.error('Failed to generate daily horoscope', { error, userId: ctx.from?.id });
+    await ctx.api.editMessageText(
+      ctx.chat!.id,
+      loadingMsg.message_id,
+      tUser(user, 'today.error')
+    ).catch(() => {});
+  }
+}
 
 export function registerTodayHandler(bot: Bot): void {
   bot.command('today', async (ctx) => {
@@ -15,42 +72,20 @@ export function registerTodayHandler(bot: Bot): void {
     logger.info(`/today from ${telegramId}`);
 
     if (!user) {
-      await ctx.reply('❗ Пожалуйста, начните с команды /start');
+      await ctx.reply(tUser(user, 'common.start_first'));
       return;
     }
 
     if (!user.birth_date) {
       await ctx.reply(
-        '📅 Для получения персонального гороскопа укажите дату рождения!\n\nИспользуйте команду /settings',
-        { reply_markup: new InlineKeyboard().text('⚙️ Указать дату рождения', 'edit_birth_date') }
+        tUser(user, 'settings.birth_required'),
+        { reply_markup: birthDatePromptKeyboard(user) }
       );
       return;
     }
 
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-
-    const tz = user.timezone || 'Europe/Moscow';
-    const dateKey = getLocalDateKey(tz);
-    const cached = getHoroscope(user.id, dateKey);
-    let horoscopeText: string;
-
-    if (cached) {
-      horoscopeText = cached.content;
-    } else {
-      horoscopeText = await generateDailyHoroscope(user, new Date());
-      saveHoroscope({ user_id: user.id, date: dateKey, content: horoscopeText });
-    }
-
-    const keyboard = new InlineKeyboard();
-    if (!isSubscriptionActive(user)) {
-      keyboard.text('⭐ Получить Premium', 'subscribe_info').row();
-    }
-    keyboard
-      .webApp('🌟 Открыть Mini App', MINI_APP_URL).row()
-      .text('📅 Недельный прогноз', 'weekly_horoscope')
-      .text('🌙 Фаза луны', 'moon_phase');
-
-    await ctx.reply(horoscopeText, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await sendTodayHoroscope(ctx);
   });
 
   bot.callbackQuery('weekly_horoscope', async (ctx) => {
@@ -60,32 +95,37 @@ export function registerTodayHandler(bot: Bot): void {
 
     if (!isSubscriptionActive(user)) {
       await ctx.reply(
-        '🔒 Недельный гороскоп доступен только в *Premium*\n\nКоманда /subscribe',
+        tUser(user, 'today.weekly_premium'),
         {
           parse_mode: 'Markdown',
-          reply_markup: new InlineKeyboard().text('⭐ Оформить Premium', 'confirm_subscribe'),
+          reply_markup: premiumGateKeyboard(user),
         }
       );
       return;
     }
 
+    const loadingMsg = await ctx.reply(tUser(user, 'today.weekly_loading'), { parse_mode: 'Markdown' });
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-    const weekly = await generateWeeklyHoroscope(user);
-    await ctx.reply(weekly, {
-      parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard().webApp('📊 Подробнее', MINI_APP_URL),
-    });
+
+    try {
+      const weekly = await generateWeeklyHoroscope(user);
+      await editMarkdownSafe(ctx, loadingMsg.message_id, weekly, {
+        reply_markup: weeklyHoroscopeKeyboard(user),
+      });
+    } catch (error) {
+      logger.error('Failed to generate weekly horoscope', { error });
+      await ctx.api.editMessageText(ctx.chat!.id, loadingMsg.message_id, tUser(user, 'today.weekly_error')).catch(() => {});
+    }
   });
 
   bot.callbackQuery('horoscope_today', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     const user = getUserByTelegramId(ctx.from.id);
     if (!user?.birth_date) {
-      await ctx.reply('Укажите дату рождения: /settings');
+      await ctx.reply(tUser(user, 'settings.birth_required'));
       return;
     }
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
-    const text = await generateDailyHoroscope(user, new Date());
-    await ctx.reply(text, { parse_mode: 'Markdown' });
+    await sendTodayHoroscope(ctx);
   });
 }

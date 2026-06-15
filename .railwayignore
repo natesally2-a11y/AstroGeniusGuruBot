@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+logs/
+.env
+*.db
+*.log
+bot_run_err.txt
+public/astroguru-preview.mp4
+.git/

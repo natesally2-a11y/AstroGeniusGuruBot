@@ -1,14 +1,16 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot } from 'grammy';
 import { getUserByTelegramId } from '../../database/queries';
 import {
   sendSubscriptionInvoice, sendNatalChartInvoice,
-  isSubscriptionActive, SUBSCRIPTION_PRICE, NATAL_CHART_PRICE,
+  isSubscriptionActive, SUBSCRIPTION_PRICE,
 } from '../../payments/stars';
 import { isAdmin } from '../../config/admin';
-import { SUBSCRIPTION_TERMS } from '../helpers/messages';
+import { formatLocalizedDate, tUser } from '../../i18n';
 import { logger } from '../../utils/logger';
 
-const MINI_APP_URL = process.env.MINI_APP_URL || 'https://astroguru-production.up.railway.app/app';
+import {
+  agreePayKeyboard, confirmSubscribeKeyboard, subscribeActiveKeyboard, subscribeOfferKeyboard,
+} from '../helpers/keyboards';
 
 export function registerSubscribeHandler(bot: Bot): void {
   bot.command('subscribe', async (ctx) => {
@@ -17,158 +19,137 @@ export function registerSubscribeHandler(bot: Bot): void {
     logger.info(`/subscribe from ${telegramId}`);
 
     if (!user) {
-      await ctx.reply('❗ Начните с /start');
+      await ctx.reply(tUser(user, 'common.start_short'));
       return;
     }
 
     if (isSubscriptionActive(user)) {
       const expiresDate = isAdmin(user)
-        ? 'бессрочно (админ)'
+        ? tUser(user, 'subscribe.admin_lifetime')
         : user.subscription_expires
-          ? new Date(user.subscription_expires).toLocaleDateString('ru-RU', {
-              day: 'numeric', month: 'long', year: 'numeric',
-            })
-          : 'бессрочно';
+          ? formatLocalizedDate(user, user.subscription_expires)
+          : tUser(user, 'settings.lifetime');
 
       const renewText = user.auto_renew !== 0 && !isAdmin(user)
-        ? `🔄 Автопродление: *включено* (${SUBSCRIPTION_PRICE} ⭐/мес)`
-        : '⏸ Автопродление: *отключено*';
+        ? tUser(user, 'subscribe.auto_on', { price: String(SUBSCRIPTION_PRICE) })
+        : tUser(user, 'subscribe.auto_off');
 
-      const keyboard = new InlineKeyboard()
-        .webApp('🌟 Открыть Mini App', MINI_APP_URL).row();
-
-      if (!isAdmin(user) && user.auto_renew !== 0) {
-        keyboard.text('❌ Отменить автопродление', 'cancel_auto_renew');
-      }
-      if (!isAdmin(user)) {
-        keyboard.row().text('🔄 Продлить вручную', 'confirm_subscribe');
-      }
+      const keyboard = subscribeActiveKeyboard(
+        user,
+        !isAdmin(user) && user.auto_renew !== 0,
+        !isAdmin(user)
+      );
 
       await ctx.reply(
-        `✅ *У вас уже есть Premium!*\n\n` +
-        `📅 Действует до: *${expiresDate}*\n` +
+        `${tUser(user, 'subscribe.active_title')}\n\n` +
+        `${tUser(user, 'subscribe.active_until', { date: expiresDate })}\n` +
         `${renewText}\n\n` +
-        `💎 *Ваши возможности:*\n` +
-        `• Персональный AI-гороскоп\n` +
-        `• Натальная карта с домами и аспектами\n` +
-        `• Транзиты, недельный и месячный прогноз\n\n` +
-        `_Отмена: подписка останется до конца оплаченного периода, новые списания прекратятся._`,
+        `${tUser(user, 'subscribe.active_features')}\n\n` +
+        tUser(user, 'subscribe.active_cancel_note'),
         { parse_mode: 'Markdown', reply_markup: keyboard }
       );
       return;
     }
 
     await ctx.reply(
-      `⭐ *AstroGuru Premium — ${SUBSCRIPTION_PRICE} ⭐/мес*\n\n` +
-      `💎 *В подписке:*\n` +
-      `✅ Персональный AI-гороскоп по натальной карте\n` +
-      `✅ Натальная карта: дома, аспекты, интерпретация\n` +
-      `✅ Транзиты, недельный и месячный прогноз\n` +
-      `✅ Утренние уведомления в 9:00\n\n` +
-      SUBSCRIPTION_TERMS,
+      `${tUser(user, 'subscribe.offer_title', { price: String(SUBSCRIPTION_PRICE) })}\n\n` +
+      `${tUser(user, 'subscribe.offer_features')}\n\n` +
+      tUser(user, 'subscribe.terms'),
       {
         parse_mode: 'Markdown',
-        reply_markup: new InlineKeyboard()
-          .text('✅ Согласен, оформить', 'confirm_subscribe').row()
-          .text(`🌌 Карта разово — ${NATAL_CHART_PRICE} ⭐`, 'buy_natal_chart').row()
-          .text('❓ Telegram Stars', 'stars_info'),
+        reply_markup: subscribeOfferKeyboard(user),
       }
     );
   });
 
   bot.callbackQuery('confirm_subscribe', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
-    await ctx.reply(SUBSCRIPTION_TERMS, {
+    const user = getUserByTelegramId(ctx.from.id);
+    await ctx.reply(tUser(user, 'subscribe.terms'), {
       parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard()
-        .text(`✅ Согласен — оплатить ${SUBSCRIPTION_PRICE} ⭐`, 'agree_subscribe_pay')
-        .row()
-        .text('❌ Отмена', 'cancel_subscribe_flow'),
+      reply_markup: agreePayKeyboard(user),
     });
   });
 
   bot.callbackQuery('agree_subscribe_pay', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     const user = getUserByTelegramId(ctx.from.id);
-    if (!user) { await ctx.reply('❗ /start'); return; }
+    if (!user) { await ctx.reply(tUser(user, 'common.start_short')); return; }
     try {
-      await sendSubscriptionInvoice(bot, ctx.chat!.id, user.id);
+      await sendSubscriptionInvoice(bot, ctx.chat!.id, user.id, false, user);
       await ctx.reply(
-        `💳 Счёт на *${SUBSCRIPTION_PRICE} ⭐/мес* отправлен выше.\n\n` +
-        `После оплаты подписка продлевается автоматически. Отменить: /cancel`,
+        tUser(user, 'subscribe.invoice_sent', { price: String(SUBSCRIPTION_PRICE) }),
         { parse_mode: 'Markdown' }
       );
     } catch (error) {
       logger.error('Invoice error', { error });
-      await ctx.reply('❌ Не удалось создать счёт. Попробуйте позже.');
+      await ctx.reply(tUser(user, 'subscribe.invoice_error'));
     }
   });
 
   bot.callbackQuery('cancel_subscribe_flow', async (ctx) => {
-    await ctx.answerCallbackQuery({ text: 'Оформление отменено' }).catch(() => {});
+    const user = getUserByTelegramId(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: tUser(user, 'subscribe.flow_cancelled') }).catch(() => {});
   });
 
   bot.callbackQuery('cancel_auto_renew', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     const user = getUserByTelegramId(ctx.from.id);
     if (!user || !isSubscriptionActive(user)) {
-      await ctx.reply('Активная подписка не найдена.');
+      await ctx.reply(tUser(user, 'subscribe.no_active'));
       return;
     }
     const { cancelSubscription } = await import('../../payments/stars');
     cancelSubscription(ctx.from.id);
     const exp = user.subscription_expires
-      ? new Date(user.subscription_expires).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+      ? formatLocalizedDate(user, user.subscription_expires)
       : '—';
     await ctx.reply(
-      `✅ *Автопродление отключено*\n\n` +
-      `Premium останется активным до: *${exp}*\n` +
-      `Новые списания производиться не будут.\n\n` +
-      `Возобновить: /subscribe`,
+      tUser(user, 'subscribe.cancel_auto_ok', { date: exp }),
       { parse_mode: 'Markdown' }
     );
   });
 
   bot.command('buy_chart', async (ctx) => {
     const user = getUserByTelegramId(ctx.from!.id);
-    if (!user) { await ctx.reply('❗ /start'); return; }
+    if (!user) { await ctx.reply(tUser(user, 'common.start_short')); return; }
     if (!user.birth_date) {
-      await ctx.reply('📅 Сначала укажите дату рождения: /settings');
+      await ctx.reply(tUser(user, 'settings.birth_required'));
       return;
     }
-    await sendNatalChartInvoice(bot, ctx.chat!.id, user.id);
+    await sendNatalChartInvoice(bot, ctx.chat!.id, user.id, user);
   });
 
   bot.callbackQuery('buy_natal_chart', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     const user = getUserByTelegramId(ctx.from.id);
     if (!user?.birth_date) {
-      await ctx.reply('📅 Укажите дату рождения: /settings');
+      await ctx.reply(tUser(user, 'settings.birth_required'));
       return;
     }
-    await sendNatalChartInvoice(bot, ctx.chat!.id, user.id);
+    await sendNatalChartInvoice(bot, ctx.chat!.id, user.id, user);
   });
 
   bot.callbackQuery('subscribe_info', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     const user = getUserByTelegramId(ctx.from.id);
     if (user && isSubscriptionActive(user)) {
-      await ctx.reply(`✅ У вас уже есть Premium! Подробности: /subscribe`);
+      await ctx.reply(tUser(user, 'subscribe.already_premium_short'));
       return;
     }
     await ctx.reply(
-      `⭐ Premium — ${SUBSCRIPTION_PRICE} ⭐/мес\n\n` + SUBSCRIPTION_TERMS,
+      `${tUser(user, 'subscribe.info_title', { price: String(SUBSCRIPTION_PRICE) })}\n\n` + tUser(user, 'subscribe.terms'),
       {
         parse_mode: 'Markdown',
-        reply_markup: new InlineKeyboard()
-          .text('✅ Согласен, оформить', 'confirm_subscribe'),
+        reply_markup: confirmSubscribeKeyboard(user),
       }
     );
   });
 
   bot.callbackQuery('stars_info', async (ctx) => {
+    const user = getUserByTelegramId(ctx.from.id);
     await ctx.answerCallbackQuery({
-      text: 'Telegram Stars — официальная валюта Telegram. Купить можно в настройках Telegram.',
+      text: tUser(user, 'subscribe.stars_info'),
       show_alert: true,
     }).catch(() => {});
   });

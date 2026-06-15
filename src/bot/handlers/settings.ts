@@ -1,10 +1,35 @@
-import { Bot, InlineKeyboard } from 'grammy';
-import { getUserByTelegramId, updateUserBirthData, saveNatalChart, getNatalChart } from '../../database/queries';
-import { calculateNatalChartForUser, parseBirthDate, parseBirthTime, ZODIAC_EMOJI, ZODIAC_SIGNS } from '../../astrology/engine';
+import { Bot, Context } from 'grammy';
+import {
+  getUserByTelegramId, patchUserBirthData, saveNatalChart, getNatalChart, User,
+} from '../../database/queries';
+import { calculateNatalChartForUser, ZODIAC_EMOJI, ZODIAC_SIGNS } from '../../astrology/engine';
+import {
+  birthSavedKeyboard, settingsMenuKeyboard, skipCityKeyboard, skipCityOnlyKeyboard, skipTimeKeyboard,
+} from '../helpers/keyboards';
+import { DATE_LOCALES, LangCode, resolveUserLang, t, TranslationKey } from '../../i18n';
+import { translateSign } from '../../i18n/astro';
 import { logger } from '../../utils/logger';
+
+const DATE_LOCALE: Record<LangCode, string> = DATE_LOCALES;
 
 // Shared in-memory state for multi-step conversations
 export const userStates = new Map<number, { step: string; data: Record<string, string> }>();
+
+function userLang(ctx: Context, user?: User | null): LangCode {
+  return resolveUserLang(user, ctx.from?.language_code);
+}
+
+function msg(ctx: Context, user: User | null | undefined, key: TranslationKey, params?: Record<string, string>): string {
+  return t(userLang(ctx, user ?? undefined), key, params);
+}
+
+function formatDate(ctx: Context, user: User | null | undefined, iso?: string): string {
+  if (!iso) return msg(ctx, user, 'settings.lifetime');
+  const lang = userLang(ctx, user);
+  return new Date(iso).toLocaleDateString(DATE_LOCALE[lang] || 'en-US', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
+}
 
 export function registerSettingsHandler(bot: Bot): void {
 
@@ -12,59 +37,51 @@ export function registerSettingsHandler(bot: Bot): void {
     await showSettings(ctx);
   });
 
-  // Entry point used from /start button when no birth data yet
   bot.callbackQuery('edit_birth_date', async (ctx) => {
     await ctx.answerCallbackQuery();
+    const user = getUserByTelegramId(ctx.from.id);
     userStates.set(ctx.from.id, { step: 'birth_date', data: {} });
-    await ctx.reply(
-      '📅 *Введите дату рождения* в формате ДД.ММ.ГГГГ\n\nНапример: `15.06.1990`',
-      { parse_mode: 'Markdown' }
-    );
+    await ctx.reply(msg(ctx, user, 'birth.enter_date'), { parse_mode: 'Markdown' });
   });
 
   bot.callbackQuery('edit_birth_time', async (ctx) => {
     await ctx.answerCallbackQuery();
+    const user = getUserByTelegramId(ctx.from.id);
     userStates.set(ctx.from.id, { step: 'birth_time', data: {} });
-    await ctx.reply(
-      '🕐 *Введите время рождения* в формате ЧЧ:ММ\n\nНапример: `14:30`\n\n_Точное время нужно для расчёта асцендента_',
-      { parse_mode: 'Markdown' }
-    );
+    await ctx.reply(msg(ctx, user, 'birth.enter_time'), { parse_mode: 'Markdown' });
   });
 
   bot.callbackQuery('edit_birth_city', async (ctx) => {
     await ctx.answerCallbackQuery();
+    const user = getUserByTelegramId(ctx.from.id);
     userStates.set(ctx.from.id, { step: 'birth_city', data: {} });
-    await ctx.reply(
-      '🏙️ *Введите город рождения*\n\nНапример: `Москва` или `Moscow`',
-      { parse_mode: 'Markdown' }
-    );
+    await ctx.reply(msg(ctx, user, 'birth.enter_city'), { parse_mode: 'Markdown' });
   });
 
   bot.callbackQuery('recalculate_chart', async (ctx) => {
     await ctx.answerCallbackQuery();
     const user = getUserByTelegramId(ctx.from.id);
     if (!user?.birth_date) {
-      await ctx.reply('❗ Сначала укажите дату рождения');
+      await ctx.reply(msg(ctx, user, 'birth.need_date_first'));
       return;
     }
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
     await recalculateAndSaveChart(user.id, user);
-    await ctx.reply('✅ Натальная карта пересчитана!');
+    await ctx.reply(msg(ctx, user, 'birth.recalculated'));
   });
 
   bot.callbackQuery('skip_birth_time', async (ctx) => {
     await ctx.answerCallbackQuery();
     const telegramId = ctx.from.id;
     const state = userStates.get(telegramId);
+    const user = getUserByTelegramId(telegramId);
     if (state?.data.birth_date) {
+      patchUserBirthData(telegramId, { birth_date: state.data.birth_date });
       userStates.set(telegramId, { step: 'birth_city_prompt', data: state.data });
-      await ctx.reply(
-        '🏙️ Укажите *город рождения* или нажмите "Пропустить"',
-        {
-          parse_mode: 'Markdown',
-          reply_markup: new InlineKeyboard().text('⏭ Пропустить город', 'skip_birth_city'),
-        }
-      );
+      await ctx.reply(msg(ctx, user, 'birth.city_prompt'), {
+        parse_mode: 'Markdown',
+        reply_markup: skipCityKeyboard(user),
+      });
     }
   });
 
@@ -72,19 +89,19 @@ export function registerSettingsHandler(bot: Bot): void {
     await ctx.answerCallbackQuery();
     const telegramId = ctx.from.id;
     const state = userStates.get(telegramId);
-    if (state?.data.birth_date) {
-      // Standalone skip — save with existing birth_date
-      const user = getUserByTelegramId(telegramId);
-      if (user?.birth_date) {
-        updateUserBirthData(telegramId, { birth_date: user.birth_date, birth_time: state.data.birth_time });
-        await recalculateAndSaveChart(user.id, user);
-      }
-      userStates.delete(telegramId);
-      await ctx.reply('✅ Данные сохранены! Получайте гороскоп командой /today ✨');
-    }
+    if (!state?.data.birth_date) return;
+
+    patchUserBirthData(telegramId, {
+      birth_date: state.data.birth_date,
+      birth_time: state.data.birth_time,
+    });
+
+    const user = getUserByTelegramId(telegramId);
+    if (user) await recalculateAndSaveChart(user.id, user);
+    userStates.delete(telegramId);
+    await showBirthDataSaved(ctx, telegramId, state.data);
   });
 
-  // ─── Central text handler for multi-step conversation ────────────────────
   bot.on('message:text', async (ctx, next) => {
     const telegramId = ctx.from!.id;
     const state = userStates.get(telegramId);
@@ -94,68 +111,55 @@ export function registerSettingsHandler(bot: Bot): void {
       return;
     }
 
+    const user = getUserByTelegramId(telegramId);
     const text = ctx.message.text.trim();
 
-    // ── Step 1: birth date ──────────────────────────────────────────────────
     if (state.step === 'birth_date') {
       if (!isValidDate(text)) {
-        await ctx.reply(
-          '❌ Неверный формат. Нужно ДД.ММ.ГГГГ\n\nНапример: `15.06.1990`',
-          { parse_mode: 'Markdown' }
-        );
+        await ctx.reply(msg(ctx, user, 'birth.invalid_date'), { parse_mode: 'Markdown' });
         return;
       }
+      patchUserBirthData(telegramId, { birth_date: text });
       userStates.set(telegramId, { step: 'birth_time_prompt', data: { birth_date: text } });
-      await ctx.reply(
-        `✅ Дата рождения: *${text}*\n\n🕐 Теперь введите *время рождения* (ЧЧ:ММ) или пропустите:`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: new InlineKeyboard().text('⏭ Пропустить', 'skip_birth_time'),
-        }
-      );
+      await ctx.reply(msg(ctx, user, 'birth.date_ok', { date: text }), {
+        parse_mode: 'Markdown',
+        reply_markup: skipTimeKeyboard(user),
+      });
       return;
     }
 
-    // ── Step 2: birth time ──────────────────────────────────────────────────
     if (state.step === 'birth_time_prompt' || state.step === 'birth_time') {
       if (!isValidTime(text)) {
-        await ctx.reply(
-          '❌ Неверный формат. Нужно ЧЧ:ММ\n\nНапример: `14:30`',
-          { parse_mode: 'Markdown' }
-        );
+        await ctx.reply(msg(ctx, user, 'birth.invalid_time'), { parse_mode: 'Markdown' });
         return;
       }
 
       const newData = { ...state.data, birth_time: text };
 
       if (state.data.birth_date) {
-        // Came from full flow — ask city next
+        patchUserBirthData(telegramId, { birth_date: state.data.birth_date, birth_time: text });
         userStates.set(telegramId, { step: 'birth_city_prompt', data: newData });
-        await ctx.reply(
-          `✅ Время: *${text}*\n\n🏙️ Введите *город рождения* или пропустите:`,
-          {
-            parse_mode: 'Markdown',
-            reply_markup: new InlineKeyboard().text('⏭ Пропустить', 'skip_birth_city'),
-          }
-        );
+        await ctx.reply(msg(ctx, user, 'birth.time_ok', { time: text }), {
+          parse_mode: 'Markdown',
+          reply_markup: skipCityOnlyKeyboard(user),
+        });
       } else {
-        // Standalone time edit
-        const user = getUserByTelegramId(telegramId);
-        if (user?.birth_date) {
-          updateUserBirthData(telegramId, { birth_date: user.birth_date, birth_time: text });
+        const u = getUserByTelegramId(telegramId);
+        if (u?.birth_date) {
+          patchUserBirthData(telegramId, { birth_time: text });
+          await recalculateAndSaveChart(u.id, getUserByTelegramId(telegramId)!);
         }
         userStates.delete(telegramId);
-        await ctx.reply('✅ Время рождения обновлено!');
+        await ctx.reply(msg(ctx, user, 'birth.time_updated'));
       }
       return;
     }
 
-    // ── Step 3: city ────────────────────────────────────────────────────────
     if (state.step === 'birth_city_prompt' || state.step === 'birth_city') {
       const coords = getCityCoordinates(text);
-      const birthDate = state.data.birth_date || getUserByTelegramId(telegramId)?.birth_date || '';
+      const birthDate = state.data.birth_date || user?.birth_date || '';
 
-      updateUserBirthData(telegramId, {
+      patchUserBirthData(telegramId, {
         birth_date: birthDate,
         birth_time: state.data.birth_time,
         birth_city: text,
@@ -164,8 +168,8 @@ export function registerSettingsHandler(bot: Bot): void {
         timezone: coords.timezone,
       });
 
-      const user = getUserByTelegramId(telegramId);
-      if (user) await recalculateAndSaveChart(user.id, user);
+      const u = getUserByTelegramId(telegramId);
+      if (u) await recalculateAndSaveChart(u.id, u);
       userStates.delete(telegramId);
       await showBirthDataSaved(ctx, telegramId, state.data, text);
       return;
@@ -175,83 +179,82 @@ export function registerSettingsHandler(bot: Bot): void {
   });
 }
 
-// ─── /settings display ────────────────────────────────────────────────────────
-
-async function showSettings(ctx: any): Promise<void> {
+async function showSettings(ctx: Context): Promise<void> {
   const telegramId = ctx.from!.id;
   const user = getUserByTelegramId(telegramId);
   logger.info(`/settings from ${telegramId}`);
 
   if (!user) {
-    await ctx.reply('❗ Пожалуйста, начните с команды /start');
+    await ctx.reply(msg(ctx, null, 'common.start_first'));
     return;
   }
 
+  const notSet = msg(ctx, user, 'birth.not_set');
+  const notSetCity = msg(ctx, user, 'birth.not_set_city');
+
   const birthInfo = user.birth_date
-    ? `📅 Дата рождения: *${user.birth_date}*\n` +
-      `🕐 Время: *${user.birth_time || 'не указано'}*\n` +
-      `🏙️ Город: *${user.birth_city || 'не указан'}*`
-    : '❌ Данные о рождении не указаны';
+    ? msg(ctx, user, 'settings.line_date', { value: user.birth_date }) + '\n' +
+      msg(ctx, user, 'settings.line_time', { value: user.birth_time || notSet }) + '\n' +
+      msg(ctx, user, 'settings.line_city', { value: user.birth_city || notSetCity })
+    : msg(ctx, user, 'settings.no_birth');
 
   const subStatus = user.subscription_status === 'premium'
-    ? `⭐ *Premium* (до ${user.subscription_expires
-        ? new Date(user.subscription_expires).toLocaleDateString('ru-RU')
-        : 'бессрочно'})`
-    : '🆓 Бесплатный';
+    ? msg(ctx, user, 'settings.sub_premium', {
+        date: user.subscription_expires
+          ? formatDate(ctx, user, user.subscription_expires)
+          : msg(ctx, user, 'settings.lifetime'),
+      })
+    : msg(ctx, user, 'settings.sub_free');
 
   await ctx.reply(
-    `⚙️ *Настройки AstroGuru*\n\n` +
+    `${msg(ctx, user, 'settings.page_title')}\n\n` +
     `👤 *${user.first_name}${user.last_name ? ' ' + user.last_name : ''}*\n\n` +
     `${birthInfo}\n\n` +
-    `💎 Подписка: ${subStatus}`,
+    msg(ctx, user, 'settings.sub_label', { status: subStatus }),
     {
       parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard()
-        .text('📅 Изменить дату рождения', 'edit_birth_date').row()
-        .text('🕐 Изменить время', 'edit_birth_time').row()
-        .text('🏙️ Изменить город', 'edit_birth_city').row()
-        .text('🔮 Пересчитать натальную карту', 'recalculate_chart'),
+      reply_markup: settingsMenuKeyboard(user),
     }
   );
 }
 
-// ─── Show confirmation after birth data saved ─────────────────────────────────
-
 async function showBirthDataSaved(
-  ctx: any,
+  ctx: Context,
   telegramId: number,
   data: Record<string, string>,
   city?: string
 ): Promise<void> {
   const user = getUserByTelegramId(telegramId);
   const chart = user ? getNatalChart(user.id) : null;
+  const lang = userLang(ctx, user);
+  const notSet = msg(ctx, user, 'birth.not_set');
+  const notSetCity = msg(ctx, user, 'birth.not_set_city');
 
-  const sunEmoji = chart ? ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(chart.sun_sign as any)] || '☀️' : '☀️';
-  const moonEmoji = chart ? ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(chart.moon_sign as any)] || '🌙' : '🌙';
-  const risingEmoji = chart ? ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(chart.rising_sign as any)] || '↑' : '↑';
+  let chartBlock = '';
+  if (chart) {
+    const sunEmoji = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(chart.sun_sign as typeof ZODIAC_SIGNS[number])] || '☀️';
+    const moonEmoji = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(chart.moon_sign as typeof ZODIAC_SIGNS[number])] || '🌙';
+    const risingEmoji = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(chart.rising_sign as typeof ZODIAC_SIGNS[number])] || '↑';
+    chartBlock =
+      `${msg(ctx, user, 'birth.chart_header')}\n` +
+      msg(ctx, user, 'birth.planet_sun', { emoji: sunEmoji, sign: translateSign(lang, chart.sun_sign) }) + '\n' +
+      msg(ctx, user, 'birth.planet_moon', { emoji: moonEmoji, sign: translateSign(lang, chart.moon_sign) }) + '\n' +
+      msg(ctx, user, 'birth.planet_rising', { emoji: risingEmoji, sign: translateSign(lang, chart.rising_sign) }) + '\n\n';
+  }
 
   await ctx.reply(
-    `🎉 *Данные сохранены!*\n\n` +
-    `📅 Дата: *${data.birth_date}*\n` +
-    `🕐 Время: *${data.birth_time || 'не указано'}*\n` +
-    `🏙️ Город: *${city || 'не указан'}*\n\n` +
-    (chart
-      ? `🌟 *Ваша натальная карта:*\n` +
-        `${sunEmoji} Солнце в *${chart.sun_sign}*\n` +
-        `${moonEmoji} Луна в *${chart.moon_sign}*\n` +
-        `${risingEmoji} Асцендент *${chart.rising_sign}*\n\n`
-      : '') +
-    `Теперь получайте гороскоп командой /today ✨`,
+    `${msg(ctx, user, 'birth.saved')}\n\n` +
+    msg(ctx, user, 'birth.line_date', { value: data.birth_date }) + '\n' +
+    msg(ctx, user, 'birth.line_time', { value: data.birth_time || notSet }) + '\n' +
+    msg(ctx, user, 'birth.line_city', { value: city || notSetCity }) + '\n\n' +
+    chartBlock +
+    msg(ctx, user, 'birth.today_hint'),
     {
       parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard()
-        .text('🔮 Получить гороскоп', 'horoscope_today').row()
-        .text('⭐ Оформить Premium', 'subscribe_info'),
+      reply_markup: birthSavedKeyboard(user),
     }
   );
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function isValidDate(str: string): boolean {
   const match = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
