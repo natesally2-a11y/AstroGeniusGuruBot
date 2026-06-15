@@ -29,6 +29,11 @@ export function sanitizeForTelegram(text: string): string {
   return s.trim();
 }
 
+/** Sanitize horoscope text; delivery stays in one Telegram message (no split, no truncate). */
+export function prepareHoroscopeText(text: string): string {
+  return sanitizeForTelegram(text);
+}
+
 export function splitTelegramMessage(text: string, maxLen = TELEGRAM_MAX_LENGTH): string[] {
   if (text.length <= maxLen) return [text];
 
@@ -49,5 +54,5 @@ export function splitTelegramMessage(text: string, maxLen = TELEGRAM_MAX_LENGTH)
 }
 
 export function prepareTelegramText(text: string): string[] {
-  return splitTelegramMessage(sanitizeForTelegram(text));
+  return [prepareHoroscopeText(text)];
 }

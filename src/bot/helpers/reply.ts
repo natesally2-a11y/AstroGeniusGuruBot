@@ -53,11 +53,6 @@ export async function editMarkdownSafe(
     } catch (editErr) {
       logger.warn('Plain edit failed, sending new message', { editErr });
       await replyMarkdownSafe(ctx, text, options);
-      return;
     }
-  }
-
-  for (let i = 1; i < parts.length; i++) {
-    await replyMarkdownSafe(ctx, parts[i]);
   }
 }

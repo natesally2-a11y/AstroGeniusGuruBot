@@ -138,7 +138,8 @@ export function createBot(): Bot {
 
 export function getWebhookCallback(bot: Bot) {
   return webhookCallback(bot, 'express', {
-    timeoutMilliseconds: 55_000,
+    // Let Premium AI finish in bot; ACK webhook early so Telegram does not retry.
+    timeoutMilliseconds: 120_000,
     onTimeout: 'return',
   });
 }

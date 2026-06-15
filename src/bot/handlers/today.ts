@@ -4,7 +4,6 @@ import { generateDailyHoroscope, generateWeeklyHoroscope } from '../../astrology
 import { isSubscriptionActive } from '../../payments/stars';
 import { getHoroscopeCacheKey, parseLangFromHoroscopeKey } from '../../astrology/timezone';
 import { editMarkdownSafe, replyMarkdownSafe } from '../helpers/reply';
-import { sanitizeForTelegram } from '../helpers/telegramText';
 import {
   birthDatePromptKeyboard, horoscopeFollowUpKeyboardForLang,
   premiumGateKeyboard, weeklyHoroscopeKeyboard,
@@ -48,7 +47,7 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
   );
 
   try {
-    const horoscopeText = sanitizeForTelegram(await generateDailyHoroscope(user));
+    const horoscopeText = await generateDailyHoroscope(user);
     if (horoscopeText.length < 120) {
       throw new Error('Horoscope too short');
     }
