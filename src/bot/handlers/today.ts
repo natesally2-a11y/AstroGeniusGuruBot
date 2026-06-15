@@ -3,7 +3,7 @@ import { getUserByTelegramId, saveHoroscope, getHoroscope } from '../../database
 import { generateDailyHoroscope, generateWeeklyHoroscope } from '../../astrology/horoscope';
 import { isSubscriptionActive } from '../../payments/stars';
 import { getHoroscopeCacheKey, parseLangFromHoroscopeKey } from '../../astrology/timezone';
-import { editMarkdownSafe, replyMarkdownSafe } from '../helpers/reply';
+import { deliverHoroscopeMessage, editMarkdownSafe } from '../helpers/reply';
 import { checkAiQuota, trackAiGeneration } from '../../payments/usageLimits';
 import { isAiEnabled } from '../../ai/llm';
 import {
@@ -13,10 +13,22 @@ import {
 import { resolveUserLang, tUser } from '../../i18n';
 import { logger } from '../../utils/logger';
 
+const BUILD_TAG = 'horoscope-v3-direct';
+const recentTodayByUser = new Map<number, number>();
+const DEDUP_MS = 10_000;
+
 function isBrokenHoroscopeCache(content: string): boolean {
   if (content.length < 80) return true;
   if (/###/.test(content)) return true;
   if (/\*\*/.test(content)) return true;
+  return false;
+}
+
+function isDuplicateTodayRequest(telegramId: number): boolean {
+  const now = Date.now();
+  const last = recentTodayByUser.get(telegramId) ?? 0;
+  if (now - last < DEDUP_MS) return true;
+  recentTodayByUser.set(telegramId, now);
   return false;
 }
 
@@ -44,7 +56,7 @@ async function upgradeDailyHoroscopeWithAi(
     await editMarkdownSafe(ctx, messageId, aiText, { reply_markup: keyboard });
   } catch (error) {
     logger.warn('AI horoscope upgrade failed, template already delivered', {
-      error, userId: user.telegram_id,
+      error, userId: user.telegram_id, build: BUILD_TAG,
     });
   }
 }
@@ -56,6 +68,11 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
     return;
   }
 
+  if (isDuplicateTodayRequest(user.telegram_id)) {
+    logger.info('Skipped duplicate /today', { userId: user.telegram_id, build: BUILD_TAG });
+    return;
+  }
+
   const dateKey = getHoroscopeCacheKey(user);
   const cached = getHoroscope(user.id, dateKey);
   const isPremium = isSubscriptionActive(user);
@@ -63,14 +80,9 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
   const keyboard = horoscopeFollowUpKeyboardForLang(lang, isPremium);
 
   if (cached?.content && !isBrokenHoroscopeCache(cached.content)) {
-    await replyMarkdownSafe(ctx, cached.content, { reply_markup: keyboard });
+    await deliverHoroscopeMessage(ctx, cached.content, { reply_markup: keyboard });
     return;
   }
-
-  const loadingMsg = await ctx.reply(
-    `${tUser(user, 'today.loading')}\n\n${tUser(user, 'today.loading_sub')}`,
-    { parse_mode: 'Markdown' }
-  );
 
   try {
     const templateText = await generateDailyHoroscope(user, false);
@@ -79,16 +91,11 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
     }
 
     saveHoroscope({ user_id: user.id, date: dateKey, content: templateText });
-    await editMarkdownSafe(ctx, loadingMsg.message_id, templateText, { reply_markup: keyboard });
-
-    void upgradeDailyHoroscopeWithAi(ctx, loadingMsg.message_id, user, dateKey, keyboard);
+    const messageId = await deliverHoroscopeMessage(ctx, templateText, { reply_markup: keyboard });
+    void upgradeDailyHoroscopeWithAi(ctx, messageId, user, dateKey, keyboard);
   } catch (error) {
-    logger.error('Failed to generate daily horoscope', { error, userId: ctx.from?.id });
-    await ctx.api.editMessageText(
-      ctx.chat!.id,
-      loadingMsg.message_id,
-      tUser(user, 'today.error')
-    ).catch(() => {});
+    logger.error('Failed to generate daily horoscope', { error, userId: ctx.from?.id, build: BUILD_TAG });
+    await ctx.reply(tUser(user, 'today.error'));
   }
 }
 
@@ -97,7 +104,7 @@ export function registerTodayHandler(bot: Bot): void {
     const telegramId = ctx.from!.id;
     const user = getUserByTelegramId(telegramId);
 
-    logger.info(`/today from ${telegramId}`);
+    logger.info(`/today from ${telegramId}`, { build: BUILD_TAG });
 
     if (!user) {
       await ctx.reply(tUser(user, 'common.start_first'));
@@ -132,34 +139,28 @@ export function registerTodayHandler(bot: Bot): void {
       return;
     }
 
-    const loadingMsg = await ctx.reply(tUser(user, 'today.weekly_loading'), { parse_mode: 'Markdown' });
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
 
     try {
       const quota = checkAiQuota(user);
       if (!quota.ok) {
-        await ctx.api.editMessageText(
-          ctx.chat!.id,
-          loadingMsg.message_id,
-          quota.message || tUser(user, 'today.error'),
-          { parse_mode: 'Markdown' }
-        ).catch(() => {});
+        await ctx.reply(quota.message || tUser(user, 'today.error'), { parse_mode: 'Markdown' });
         return;
       }
       const weekly = await generateWeeklyHoroscope(user, false);
-      await editMarkdownSafe(ctx, loadingMsg.message_id, weekly, {
+      const messageId = await deliverHoroscopeMessage(ctx, weekly, {
         reply_markup: weeklyHoroscopeKeyboard(user),
       });
       void generateWeeklyHoroscope(user, true).then(async (aiWeekly) => {
         if (aiWeekly.length < 120) return;
         trackAiGeneration(user, 'weekly');
-        await editMarkdownSafe(ctx, loadingMsg.message_id, aiWeekly, {
+        await editMarkdownSafe(ctx, messageId, aiWeekly, {
           reply_markup: weeklyHoroscopeKeyboard(user),
         });
       }).catch((error) => logger.warn('Weekly AI upgrade failed', { error }));
     } catch (error) {
       logger.error('Failed to generate weekly horoscope', { error });
-      await ctx.api.editMessageText(ctx.chat!.id, loadingMsg.message_id, tUser(user, 'today.weekly_error')).catch(() => {});
+      await ctx.reply(tUser(user, 'today.weekly_error'));
     }
   });
 

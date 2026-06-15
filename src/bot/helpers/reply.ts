@@ -12,6 +12,24 @@ function stripMarkdown(text: string): string {
     .replace(/_(.*?)_/g, '$1');
 }
 
+export async function deliverHoroscopeMessage(
+  ctx: Context,
+  text: string,
+  options: ReplyOptions = {}
+): Promise<number> {
+  const parts = prepareTelegramText(text);
+  const first = parts[0];
+
+  try {
+    const msg = await ctx.reply(first, { parse_mode: 'Markdown', ...options });
+    return msg.message_id;
+  } catch (error) {
+    logger.warn('Markdown deliver failed, sending plain text', { error, userId: ctx.from?.id });
+    const msg = await ctx.reply(stripMarkdown(first), options);
+    return msg.message_id;
+  }
+}
+
 export async function replyMarkdownSafe(
   ctx: Context,
   text: string,

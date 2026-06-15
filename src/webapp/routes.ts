@@ -62,7 +62,11 @@ function requireAuth(req: Request, res: Response, next: () => void): void {
 }
 
 router.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    build: 'horoscope-v3-direct',
+  });
 });
 
 function birthDataError(res: Response, user?: ReturnType<typeof resolveWebAppUser>): void {
