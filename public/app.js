@@ -499,20 +499,29 @@ class AstroGuruApp {
 
   updateChartTabState() {
     const hasBirth = this.hasBirthData();
+    const hasFullAccess = this.userData?.isPremium || this.userData?.hasNatalChart;
     const locked = document.getElementById('chart-locked');
     const missing = document.getElementById('chart-birth-missing');
+    const previewOnly = document.getElementById('chart-preview-only');
     const container = document.getElementById('chart-container');
 
     if (!hasBirth) {
       if (locked) locked.style.display = 'none';
       if (missing) missing.style.display = 'block';
+      if (previewOnly) previewOnly.style.display = 'none';
       if (container) container.style.display = 'none';
       return;
     }
 
     if (missing) missing.style.display = 'none';
     if (locked) locked.style.display = 'none';
-    if (container) container.style.display = 'block';
+    if (hasFullAccess) {
+      if (previewOnly) previewOnly.style.display = 'none';
+      if (container) container.style.display = 'block';
+    } else {
+      if (previewOnly) previewOnly.style.display = 'block';
+      if (container) container.style.display = 'none';
+    }
   }
 
   renderBirthDataRequired(targetId = 'chart-interpretation') {
@@ -839,7 +848,7 @@ class AstroGuruApp {
     }
 
     const hasFullAccess = this.userData?.isPremium || this.userData?.hasNatalChart;
-    const previewPanel = document.getElementById('chart-preview-panel');
+    const previewText = document.getElementById('chart-preview-text');
     const decodePanel = document.getElementById('chart-decode-panel');
     const interp = document.getElementById('chart-interpretation');
 
@@ -848,29 +857,24 @@ class AstroGuruApp {
         interp.innerHTML = this.renderInlineWaiting(this.t('aiChart'), this.t('aiChartHint'));
       }
       this.showAiLoading(this.t('aiChart'), this.t('aiChartHint'));
-    } else if (previewPanel) {
-      previewPanel.style.display = 'none';
+    } else if (previewText) {
+      previewText.innerHTML = this.renderInlineWaiting(this.t('aiChart'), this.t('aiChartHint'));
     }
 
     try {
       const chart = await this.makeRequest('/natal-chart');
       this._lastChartData = chart;
-      this.ascendantOffset = chart.ascendant?.longitude || 0;
-      this.drawNatalChart(chart);
-      this.renderPlanetsList(chart);
 
       if (chart.isPreview) {
-        if (previewPanel) {
-          previewPanel.style.display = 'block';
-          const textEl = document.getElementById('chart-preview-text');
-          if (textEl) textEl.innerHTML = this.renderMarkdown(chart.preview || '');
+        if (previewText) {
+          previewText.innerHTML = this.renderMarkdown(chart.preview || '');
         }
-        decodePanel?.style.setProperty('display', 'none');
-        if (interp) interp.style.display = 'none';
         return;
       }
 
-      previewPanel?.style.setProperty('display', 'none');
+      this.ascendantOffset = chart.ascendant?.longitude || 0;
+      this.drawNatalChart(chart);
+      this.renderPlanetsList(chart);
       if (chart.decoding) {
         this.renderNatalDecoding(chart.decoding);
       } else if (interp) {
@@ -888,9 +892,11 @@ class AstroGuruApp {
       if (err.message?.includes('дату рождения') || err.message?.includes('Birth') || err.message?.includes('/settings')) {
         this.updateChartTabState();
         this.renderBirthDataRequired();
-      } else if (interp) {
+      } else if (hasFullAccess && interp) {
         interp.style.display = '';
         interp.innerHTML = `<div style="color:var(--tg-hint);text-align:center;padding:16px">${err.message || this.t('loadError')}</div>`;
+      } else if (previewText) {
+        previewText.innerHTML = `<div style="color:var(--tg-hint);text-align:center;padding:16px">${err.message || this.t('loadError')}</div>`;
       }
     } finally {
       if (hasFullAccess) this.hideAiLoading();
