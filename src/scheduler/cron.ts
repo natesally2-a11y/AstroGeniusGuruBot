@@ -6,7 +6,7 @@ import {
 } from '../database/queries';
 import { sendSubscriptionInvoice, SUBSCRIPTION_PRICE } from '../payments/stars';
 import { isAdmin } from '../config/admin';
-import { generateDailyHoroscope } from '../astrology/horoscope';
+import { generateDailyHoroscopeReliable } from '../bot/helpers/horoscopeDelivery';
 import { saveHoroscope, markHoroscopeSent, getHoroscope } from '../database/queries';
 import { isNineAmInTimezone, getHoroscopeCacheKey, parseLangFromHoroscopeKey } from '../astrology/timezone';
 import { morningNotifyKeyboardForLang } from '../bot/helpers/keyboards';
@@ -30,7 +30,7 @@ async function sendDailyHoroscopeToUser(
 
     let content = existing?.content;
     if (!content) {
-      content = await generateDailyHoroscope(user, true);
+      content = await generateDailyHoroscopeReliable(user);
       saveHoroscope({ user_id: user.id, date: dateKey, content });
     }
 

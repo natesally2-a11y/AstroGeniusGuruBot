@@ -279,7 +279,7 @@ ${t(lang, 'horoscope.weekly_footer', {
   );
 }
 
-export async function generateMonthlyHoroscope(user: User): Promise<string> {
+export async function generateMonthlyHoroscope(user: User, useAi = true): Promise<string> {
   const lang = getUserLang(user);
   if (!user.birth_date) {
     return t(lang, 'settings.birth_required');
@@ -295,10 +295,12 @@ export async function generateMonthlyHoroscope(user: User): Promise<string> {
   const fallback = `🌙 *${t(lang, 'horoscope.monthly_title', { month: monthName })}*\n\n` +
     t(lang, 'horoscope.monthly_body', { sun, moon });
 
+  if (!useAi || !isAiEnabled()) return fallback;
+
   return generateAstrologyText(
     t(lang, 'ai.horoscope_monthly'),
     `Month: ${monthName}\nChart: Sun ${natalChart.sun.sign}, Moon ${natalChart.moon.sign}, ` +
       `Asc ${natalChart.ascendant.sign}`,
-    fallback, 900, 45000, lang
+    fallback, 700, 12000, lang
   );
 }

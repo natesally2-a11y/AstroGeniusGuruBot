@@ -1,11 +1,11 @@
 import { Bot, Context } from 'grammy';
-import { getUserByTelegramId, saveHoroscope, getHoroscope } from '../../database/queries';
-import { generateDailyHoroscope, generateWeeklyHoroscope } from '../../astrology/horoscope';
+import { getUserByTelegramId, getHoroscope } from '../../database/queries';
 import { isSubscriptionActive } from '../../payments/stars';
 import { getHoroscopeCacheKey, parseLangFromHoroscopeKey } from '../../astrology/timezone';
-import { editMarkdownSafe, replyMarkdownSafe } from '../helpers/reply';
+import { replyMarkdownSafe } from '../helpers/reply';
 import { sanitizeForTelegram } from '../helpers/telegramText';
-import { tryBeginForecastJob, endForecastJob } from '../helpers/forecastLock';
+import { tryBeginForecastJob } from '../helpers/forecastLock';
+import { runDailyHoroscopeDelivery, runWeeklyHoroscopeDelivery } from '../helpers/horoscopeDelivery';
 import {
   birthDatePromptKeyboard, horoscopeFollowUpKeyboardForLang,
   premiumGateKeyboard, weeklyHoroscopeKeyboard,
@@ -14,9 +14,8 @@ import { resolveUserLang, tUser } from '../../i18n';
 import { logger } from '../../utils/logger';
 
 function isBrokenHoroscopeCache(content: string): boolean {
-  if (content.length < 200) return true;
-  if (/###/.test(content)) return true;
-  return false;
+  const clean = sanitizeForTelegram(content);
+  return clean.length < 120;
 }
 
 function resolveHoroscopeLang(ctx: Context, user: NonNullable<ReturnType<typeof getUserByTelegramId>>, dateKey: string) {
@@ -53,23 +52,16 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
     { parse_mode: 'Markdown' }
   );
 
-  try {
-    const horoscopeText = sanitizeForTelegram(await generateDailyHoroscope(user));
-    if (horoscopeText.length < 120) {
-      throw new Error('Horoscope too short');
-    }
-    saveHoroscope({ user_id: user.id, date: dateKey, content: horoscopeText });
-    await editMarkdownSafe(ctx, loadingMsg.message_id, horoscopeText, { reply_markup: keyboard });
-  } catch (error) {
-    logger.error('Failed to generate daily horoscope', { error, userId: telegramId });
-    await ctx.api.editMessageText(
-      ctx.chat!.id,
-      loadingMsg.message_id,
-      tUser(user, 'today.error')
-    ).catch(() => {});
-  } finally {
-    endForecastJob(telegramId);
-  }
+  runDailyHoroscopeDelivery({
+    api: ctx.api,
+    chatId: ctx.chat!.id,
+    messageId: loadingMsg.message_id,
+    user,
+    dateKey,
+    keyboard,
+    errorText: tUser(user, 'today.error'),
+    telegramId,
+  });
 }
 
 export function registerTodayHandler(bot: Bot): void {
@@ -121,17 +113,15 @@ export function registerTodayHandler(bot: Bot): void {
     const loadingMsg = await ctx.reply(tUser(user, 'today.weekly_loading'), { parse_mode: 'Markdown' });
     await ctx.api.sendChatAction(ctx.chat!.id, 'typing');
 
-    try {
-      const weekly = await generateWeeklyHoroscope(user);
-      await editMarkdownSafe(ctx, loadingMsg.message_id, weekly, {
-        reply_markup: weeklyHoroscopeKeyboard(user),
-      });
-    } catch (error) {
-      logger.error('Failed to generate weekly horoscope', { error });
-      await ctx.api.editMessageText(ctx.chat!.id, loadingMsg.message_id, tUser(user, 'today.weekly_error')).catch(() => {});
-    } finally {
-      endForecastJob(telegramId);
-    }
+    runWeeklyHoroscopeDelivery({
+      api: ctx.api,
+      chatId: ctx.chat!.id,
+      messageId: loadingMsg.message_id,
+      user,
+      keyboard: weeklyHoroscopeKeyboard(user),
+      errorText: tUser(user, 'today.weekly_error'),
+      telegramId,
+    });
   });
 
   bot.callbackQuery('horoscope_today', async (ctx) => {

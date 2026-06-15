@@ -40,7 +40,7 @@ function aspectLabel(lang: LangCode, aspectType: string): string {
   return key ? t(lang, key) : aspectType;
 }
 
-function buildTransitFallback(transits: Transit[], lang: LangCode): string {
+export function buildTransitFallback(transits: Transit[], lang: LangCode): string {
   if (transits.length === 0) {
     return t(lang, 'transit.calm_day');
   }
@@ -112,7 +112,7 @@ export async function generateTransitForecastResult(user: User): Promise<Transit
       `Date: ${today}\n${transitData}`,
     fallback,
     650,
-    18000,
+    12000,
     lang
   );
 
