@@ -47,7 +47,10 @@ export function generateFreeHoroscope(
   lang = getUserLang(null)
 ): string {
   const seed = parts.day + parts.month * 31;
-  const theme = getSignTheme(lang, sunSign, seed);
+  const overview = getSignTheme(lang, sunSign, seed);
+  const love = getSignTheme(lang, sunSign, seed + 7);
+  const work = getSignTheme(lang, sunSign, seed + 13);
+  const advice = getSignTheme(lang, sunSign, seed + 19);
   const numbers = LUCKY_NUMBERS[sunSign];
   const color = getLuckyColor(lang, sunSign);
   const emoji = ZODIAC_EMOJI[ZODIAC_SIGNS.indexOf(sunSign)];
@@ -56,7 +59,13 @@ export function generateFreeHoroscope(
   return `${emoji} *${t(lang, 'horoscope.free_title', { sign })}*
 📅 ${dateStr}
 
-${theme}
+${t(lang, 'horoscope.free_overview', { text: overview })}
+
+${t(lang, 'horoscope.free_love', { text: love })}
+
+${t(lang, 'horoscope.free_work', { text: work })}
+
+${t(lang, 'horoscope.free_advice', { text: advice })}
 
 ${t(lang, 'horoscope.free_lucky_numbers', { numbers: numbers.join(', ') })}
 ${t(lang, 'horoscope.free_lucky_color', { color })}
@@ -160,7 +169,7 @@ export async function generateDailyHoroscope(user: User, useAi = true): Promise<
       t(lang, 'ai.horoscope_free'),
       `Sign: ${sunPos.sign}\nMoon: ${moon.phase} in ${moon.sign}\nDate: ${dateStr}\nBase:\n${free}`,
       free + `\n\n${moonLine(moon)}`,
-      900, 45000, lang
+      1300, 55000, lang
     );
   }
 
@@ -187,7 +196,7 @@ export async function generateDailyHoroscope(user: User, useAi = true): Promise<
       `Луна сегодня: ${moon.phase} в ${moon.sign}\nДата: ${dateStr}\n` +
       `Числа: ${numbers.join(', ')}, цвет: ${color}`,
     fallback,
-    1100, 45000, lang
+    1600, 55000, lang
   );
 }
 

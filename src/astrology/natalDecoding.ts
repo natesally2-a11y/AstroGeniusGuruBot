@@ -243,6 +243,27 @@ function computeBalance(chart: NatalChartData): {
   return { elements, qualities };
 }
 
+export function buildNatalPreviewSummary(chart: NatalChartData, lang: LangCode): string {
+  const { elements, qualities } = computeBalance(chart);
+  const elNames = ELEMENT_NAMES[lang];
+  const qNames = QUALITY_NAMES[lang];
+  const elArr = [elements.fire, elements.earth, elements.air, elements.water];
+  const qArr = [qualities.cardinal, qualities.fixed, qualities.mutable];
+  const maxEl = elArr.indexOf(Math.max(...elArr));
+  const maxQ = qArr.indexOf(Math.max(...qArr));
+  const sun = translateSign(lang, chart.sun.sign);
+  const moon = translateSign(lang, chart.moon.sign);
+  const asc = translateSign(lang, chart.ascendant.sign);
+
+  const templates: Record<LangCode, string> = {
+    ru: `Ваш солнечный знак — *${sun}*, луна в *${moon}*, асцендент в *${asc}*. Доминирует стихия *${elNames[maxEl]}* и качество *${qNames[maxQ]}* — это задаёт тон вашей личности, эмоциям и тому, как вас воспринимают другие. Полная AI-расшифровка всех планет, домов и аспектов доступна после разблокировки.`,
+    en: `Your Sun is in *${sun}*, Moon in *${moon}*, Ascendant in *${asc}*. Dominant element *${elNames[maxEl]}* and quality *${qNames[maxQ]}* shape how you express yourself, feel and appear to others. Full AI decoding of every planet, house and aspect unlocks with Premium or a one-time purchase.`,
+    es: `Tu Sol está en *${sun}*, Luna en *${moon}*, Ascendente en *${asc}*. El elemento *${elNames[maxEl]}* y la cualidad *${qNames[maxQ]}* marcan tu forma de ser, sentir y mostrarte. La interpretación completa con IA de planetas, casas y aspectos se desbloquea con Premium o compra única.`,
+    ar: `شمسك في *${sun}*، قمرك في *${moon}*، طالعك في *${asc}*. العنصر *${elNames[maxEl]}* والصفة *${qNames[maxQ]}* يحددان شخصيتك ومشاعرك وانطباعك. التفسير الكامل بالذكاء الاصطناعي للكواكب والبيوت والجوانب يُفتح مع Premium أو شراء لمرة واحدة.`,
+  };
+  return templates[lang] || templates.en;
+}
+
 function buildSummary(chart: NatalChartData, lang: LangCode): string {
   const { elements, qualities } = computeBalance(chart);
   const elNames = ELEMENT_NAMES[lang];

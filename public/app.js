@@ -90,6 +90,8 @@
       today: 'Сегодня', week: 'Неделя', month: 'Месяц',
       pageNatalChart: 'Натальная карта', pageCompat: 'Совместимость', pageProfile: 'Профиль',
       chartLockedTitle: 'Натальная карта', chartLockedDesc: 'Полная карта рождения с AI-интерпретацией всех планет, домов и аспектов. Обновляется каждый месяц.',
+      chartPreviewLockedTitle: 'Полная расшифровка карты',
+      chartPreviewLockedDesc: 'AI-анализ всех планет в знаках и домах, аспекты, баланс стихий — как на профессиональной консультации.',
       premiumChartBtn: '⭐ Premium — {price} ⭐/мес', buyChartOnce: '🌌 Разово — {price} ⭐',
       chartBirthTitle: 'Нужны данные рождения',
       chartBirthDesc: 'Укажите дату, время и город в боте через /settings — данные сохранятся и подтянутся сюда автоматически.',
@@ -145,6 +147,8 @@
       today: 'Today', week: 'Week', month: 'Month',
       pageNatalChart: 'Natal Chart', pageCompat: 'Compatibility', pageProfile: 'Profile',
       chartLockedTitle: 'Natal Chart', chartLockedDesc: 'Full birth chart with AI interpretation of all planets, houses and aspects. Updated monthly.',
+      chartPreviewLockedTitle: 'Full chart decoding',
+      chartPreviewLockedDesc: 'AI analysis of planets in signs and houses, aspects, elemental balance — like a professional reading.',
       premiumChartBtn: '⭐ Premium — {price} ⭐/mo', buyChartOnce: '🌌 One-time — {price} ⭐',
       chartBirthTitle: 'Birth data required',
       chartBirthDesc: 'Set date, time and city in the bot via /settings — data will sync here automatically.',
@@ -204,6 +208,8 @@
     today: 'Hoy', week: 'Semana', month: 'Mes',
     pageNatalChart: 'Carta natal', pageCompat: 'Compatibilidad', pageProfile: 'Perfil',
     chartLockedTitle: 'Carta natal', chartLockedDesc: 'Carta de nacimiento completa con interpretación IA de planetas, casas y aspectos. Se actualiza mensualmente.',
+    chartPreviewLockedTitle: 'Decodificación completa',
+    chartPreviewLockedDesc: 'Análisis IA de planetas en signos y casas, aspectos y balance elemental — como una consulta profesional.',
     premiumChartBtn: '⭐ Premium — {price} ⭐/mes', buyChartOnce: '🌌 Una vez — {price} ⭐',
     chartBirthTitle: 'Datos de nacimiento requeridos',
     chartBirthDesc: 'Indica fecha, hora y ciudad en el bot con /settings — los datos se sincronizarán aquí.',
@@ -262,6 +268,8 @@
     today: 'اليوم', week: 'الأسبوع', month: 'الشهر',
     pageNatalChart: 'خريطة الميلاد', pageCompat: 'التوافق', pageProfile: 'الملف',
     chartLockedTitle: 'خريطة الميلاد', chartLockedDesc: 'خريطة ميلاد كاملة مع تفسير بالذكاء الاصطناعي للكواكب والبيوت والجوانب. تُحدَّث شهرياً.',
+    chartPreviewLockedTitle: 'التفسير الكامل للخريطة',
+    chartPreviewLockedDesc: 'تحليل بالذكاء الاصطناعي للكواكب في الأبراج والبيوت والجوانب وتوازن العناصر — كاستشارة احترافية.',
     premiumChartBtn: '⭐ Premium — {price} ⭐/شهر', buyChartOnce: '🌌 مرة واحدة — {price} ⭐',
     chartBirthTitle: 'مطلوب بيانات الميلاد',
     chartBirthDesc: 'أدخل التاريخ والوقت والمدينة في البوت عبر /settings — ستُزامَن البيانات هنا.',
@@ -490,26 +498,21 @@ class AstroGuruApp {
   }
 
   updateChartTabState() {
-    const u = this.userData;
-    const hasAccess = u?.isPremium || u?.hasNatalChart;
     const hasBirth = this.hasBirthData();
     const locked = document.getElementById('chart-locked');
     const missing = document.getElementById('chart-birth-missing');
     const container = document.getElementById('chart-container');
 
-    if (locked) locked.style.display = hasAccess ? 'none' : 'block';
-    if (!hasAccess) {
-      if (missing) missing.style.display = 'none';
+    if (!hasBirth) {
+      if (locked) locked.style.display = 'none';
+      if (missing) missing.style.display = 'block';
       if (container) container.style.display = 'none';
       return;
     }
-    if (!hasBirth) {
-      if (missing) missing.style.display = 'block';
-      if (container) container.style.display = 'none';
-    } else {
-      if (missing) missing.style.display = 'none';
-      if (container) container.style.display = 'block';
-    }
+
+    if (missing) missing.style.display = 'none';
+    if (locked) locked.style.display = 'none';
+    if (container) container.style.display = 'block';
   }
 
   renderBirthDataRequired(targetId = 'chart-interpretation') {
@@ -552,7 +555,7 @@ class AstroGuruApp {
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
     if (this.userData) this.applyUiLanguage();
-    if (tab === 'chart' && (this.userData?.isPremium || this.userData?.hasNatalChart)) {
+    if (tab === 'chart' && this.hasBirthData()) {
       this.refreshAndLoadChart();
     }
   }
@@ -742,7 +745,7 @@ class AstroGuruApp {
 
     this.updateChartTabState();
     document.getElementById('upgrade-banner').style.display = u.isPremium ? 'none' : 'flex';
-    if ((u.isPremium || u.hasNatalChart) && this.hasBirthData() && this.currentTab === 'chart') {
+    if (this.hasBirthData() && this.currentTab === 'chart') {
       this.loadNatalChart();
     }
     this.loadMoonBanner();
@@ -829,35 +832,55 @@ class AstroGuruApp {
   }
 
   async loadNatalChart() {
-    if (!this.userData?.isPremium && !this.userData?.hasNatalChart) return;
-
     this.updateChartTabState();
     if (!this.hasBirthData()) {
       this.renderBirthDataRequired();
       return;
     }
 
+    const hasFullAccess = this.userData?.isPremium || this.userData?.hasNatalChart;
+    const previewPanel = document.getElementById('chart-preview-panel');
+    const decodePanel = document.getElementById('chart-decode-panel');
     const interp = document.getElementById('chart-interpretation');
-    if (interp) {
-      interp.innerHTML = this.renderInlineWaiting(this.t('aiChart'), this.t('aiChartHint'));
+
+    if (hasFullAccess) {
+      if (interp) {
+        interp.innerHTML = this.renderInlineWaiting(this.t('aiChart'), this.t('aiChartHint'));
+      }
+      this.showAiLoading(this.t('aiChart'), this.t('aiChartHint'));
+    } else if (previewPanel) {
+      previewPanel.style.display = 'none';
     }
-    this.showAiLoading(this.t('aiChart'), this.t('aiChartHint'));
+
     try {
       const chart = await this.makeRequest('/natal-chart');
       this._lastChartData = chart;
       this.ascendantOffset = chart.ascendant?.longitude || 0;
       this.drawNatalChart(chart);
       this.renderPlanetsList(chart);
+
+      if (chart.isPreview) {
+        if (previewPanel) {
+          previewPanel.style.display = 'block';
+          const textEl = document.getElementById('chart-preview-text');
+          if (textEl) textEl.innerHTML = this.renderMarkdown(chart.preview || '');
+        }
+        decodePanel?.style.setProperty('display', 'none');
+        if (interp) interp.style.display = 'none';
+        return;
+      }
+
+      previewPanel?.style.setProperty('display', 'none');
       if (chart.decoding) {
         this.renderNatalDecoding(chart.decoding);
       } else if (interp) {
-        document.getElementById('chart-decode-panel')?.style.setProperty('display', 'none');
+        decodePanel?.style.setProperty('display', 'none');
         interp.style.display = '';
         if (chart.interpretation) {
           interp.innerHTML = `<h3 style="margin-bottom:8px;color:var(--accent)">📖 ${this.t('interpretation')} (${chart.monthKey})</h3>` +
             this.renderMarkdown(chart.interpretation);
         } else {
-          interp.innerHTML = `<div style="color:var(--tg-hint);text-align:center;padding:16px">${this.t('interpretationUnavailable')}</div>`;
+          interp.innerHTML = '';
         }
       }
     } catch (err) {
@@ -866,10 +889,11 @@ class AstroGuruApp {
         this.updateChartTabState();
         this.renderBirthDataRequired();
       } else if (interp) {
+        interp.style.display = '';
         interp.innerHTML = `<div style="color:var(--tg-hint);text-align:center;padding:16px">${err.message || this.t('loadError')}</div>`;
       }
     } finally {
-      this.hideAiLoading();
+      if (hasFullAccess) this.hideAiLoading();
     }
   }
 

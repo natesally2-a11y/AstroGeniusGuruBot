@@ -18,7 +18,7 @@ import {
   generateNatalInterpretation, getNatalInterpretationCacheKey, isCompleteNatalInterpretation,
   buildNatalDecoding,
 } from '../astrology/natalInterpretation';
-import { calculateNatalAspects } from '../astrology/natalDecoding';
+import { calculateNatalAspects, buildNatalPreviewSummary } from '../astrology/natalDecoding';
 import { getMoonPhase, getLuckyDay } from '../astrology/features';
 import { getLocalDateKey, getCurrentMonthKey, getHoroscopeCacheKey } from '../astrology/timezone';
 import {
@@ -178,11 +178,6 @@ router.get('/natal-chart', requireAuth, async (req: Request, res: Response) => {
     birthDataError(res, user);
     return;
   }
-  if (!hasNatalChartAccess(user)) {
-    res.status(403).json({ error: t(lang, 'webapp.natal_required'), price: NATAL_CHART_PRICE });
-    return;
-  }
-
   const birthDate = user.birth_date!.trim();
   const chart = calculateNatalChartForUser(
     birthDate, user.birth_time, user.birth_lat || 0, user.birth_lon || 0, user.timezone
@@ -196,6 +191,31 @@ router.get('/natal-chart', requireAuth, async (req: Request, res: Response) => {
     longitude: pos.longitude, retrograde: pos.retrograde || false,
     emoji: ZODIAC_EMOJI[pos.signIndex],
   });
+
+  const chartPayload = {
+    sun: formatPlanet('sun', chart.sun),
+    moon: formatPlanet('moon', chart.moon),
+    mercury: formatPlanet('mercury', chart.mercury),
+    venus: formatPlanet('venus', chart.venus),
+    mars: formatPlanet('mars', chart.mars),
+    jupiter: formatPlanet('jupiter', chart.jupiter),
+    saturn: formatPlanet('saturn', chart.saturn),
+    uranus: formatPlanet('uranus', chart.uranus),
+    neptune: formatPlanet('neptune', chart.neptune),
+    pluto: formatPlanet('pluto', chart.pluto),
+    ascendant: formatPlanet('ascendant', chart.ascendant),
+    houses: chart.houses,
+  };
+
+  if (!hasNatalChartAccess(user)) {
+    res.json({
+      ...chartPayload,
+      isPreview: true,
+      preview: buildNatalPreviewSummary(chart, lang),
+      prices: { subscription: SUBSCRIPTION_PRICE, natalChart: NATAL_CHART_PRICE },
+    });
+    return;
+  }
 
   const monthKey = getNatalInterpretationCacheKey(user.timezone, lang);
   let interpretation = getChartInterpretation(user.id, monthKey)?.content;
@@ -221,18 +241,8 @@ router.get('/natal-chart', requireAuth, async (req: Request, res: Response) => {
   }));
 
   res.json({
-    sun: formatPlanet('sun', chart.sun),
-    moon: formatPlanet('moon', chart.moon),
-    mercury: formatPlanet('mercury', chart.mercury),
-    venus: formatPlanet('venus', chart.venus),
-    mars: formatPlanet('mars', chart.mars),
-    jupiter: formatPlanet('jupiter', chart.jupiter),
-    saturn: formatPlanet('saturn', chart.saturn),
-    uranus: formatPlanet('uranus', chart.uranus),
-    neptune: formatPlanet('neptune', chart.neptune),
-    pluto: formatPlanet('pluto', chart.pluto),
-    ascendant: formatPlanet('ascendant', chart.ascendant),
-    houses: chart.houses,
+    ...chartPayload,
+    isPreview: false,
     aspects,
     interpretation,
     decoding,

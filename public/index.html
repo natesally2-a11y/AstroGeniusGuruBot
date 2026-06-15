@@ -99,6 +99,16 @@
               <canvas id="natal-chart-canvas" width="340" height="340"></canvas>
             </div>
             <div id="planets-list" class="planets-grid"></div>
+            <div id="chart-preview-panel" class="chart-preview-panel" style="display:none">
+              <div id="chart-preview-text" class="horoscope-card chart-preview-text"></div>
+              <div class="chart-preview-paywall">
+                <div class="lock-icon">🔒</div>
+                <h3 data-i18n="chartPreviewLockedTitle">Полная расшифровка карты</h3>
+                <p data-i18n="chartPreviewLockedDesc">AI-анализ всех планет в знаках и домах, аспекты, баланс стихий — как на профессиональной консультации.</p>
+                <button class="btn-subscribe" data-i18n="premiumChartBtn" onclick="app.openSubscribe()">⭐ Premium — 99 ⭐/мес</button>
+                <button class="btn-secondary" style="margin-top:10px" data-i18n="buyChartOnce" onclick="app.buyNatalChart()">🌌 Разово — 99 ⭐</button>
+              </div>
+            </div>
             <div id="chart-decode-panel" class="decode-panel" style="display:none">
               <p id="decode-summary" class="decode-summary"></p>
               <div id="decode-balance" class="decode-balance"></div>
@@ -190,6 +200,6 @@
       </div>
     </div>
   </div>
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>

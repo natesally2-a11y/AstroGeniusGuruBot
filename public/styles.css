@@ -664,6 +664,39 @@ body {
   margin-bottom: 24px;
 }
 
+.chart-preview-panel {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chart-preview-text {
+  margin-bottom: 0;
+}
+
+.chart-preview-paywall {
+  text-align: center;
+  padding: 24px 16px;
+  background: linear-gradient(180deg, var(--surface) 0%, rgba(212, 175, 55, 0.06) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.chart-preview-paywall h3 {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--gold);
+}
+
+.chart-preview-paywall p {
+  color: var(--tg-hint);
+  font-size: 13px;
+  line-height: 1.55;
+  margin-bottom: 18px;
+}
+
 /* ─── Compatibility ───────────────────────────────── */
 
 .compat-selector {
