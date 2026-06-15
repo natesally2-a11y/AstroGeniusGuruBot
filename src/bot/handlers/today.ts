@@ -5,6 +5,7 @@ import { isSubscriptionActive } from '../../payments/stars';
 import { getHoroscopeCacheKey, parseLangFromHoroscopeKey } from '../../astrology/timezone';
 import { editMarkdownSafe, replyMarkdownSafe } from '../helpers/reply';
 import { sanitizeForTelegram } from '../helpers/telegramText';
+import { tryBeginForecastJob, endForecastJob } from '../helpers/forecastLock';
 import {
   birthDatePromptKeyboard, horoscopeFollowUpKeyboardForLang,
   premiumGateKeyboard, weeklyHoroscopeKeyboard,
@@ -12,12 +13,9 @@ import {
 import { resolveUserLang, tUser } from '../../i18n';
 import { logger } from '../../utils/logger';
 
-const activeHoroscopeJobs = new Set<number>();
-
 function isBrokenHoroscopeCache(content: string): boolean {
   if (content.length < 200) return true;
   if (/###/.test(content)) return true;
-  if (/\*\*/.test(content)) return true;
   return false;
 }
 
@@ -27,14 +25,10 @@ function resolveHoroscopeLang(ctx: Context, user: NonNullable<ReturnType<typeof 
 }
 
 export async function sendTodayHoroscope(ctx: Context): Promise<void> {
-  const user = getUserByTelegramId(ctx.from!.id);
+  const telegramId = ctx.from!.id;
+  const user = getUserByTelegramId(telegramId);
   if (!user?.birth_date) {
     await ctx.reply(tUser(user, 'settings.birth_required'));
-    return;
-  }
-
-  if (activeHoroscopeJobs.has(user.id)) {
-    logger.info('Daily horoscope already in progress', { userId: user.id });
     return;
   }
 
@@ -49,7 +43,11 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
     return;
   }
 
-  activeHoroscopeJobs.add(user.id);
+  if (!tryBeginForecastJob(telegramId)) {
+    logger.info('Daily horoscope already in progress', { telegramId });
+    return;
+  }
+
   const loadingMsg = await ctx.reply(
     `${tUser(user, 'today.loading')}\n\n${tUser(user, 'today.loading_sub')}`,
     { parse_mode: 'Markdown' }
@@ -63,14 +61,14 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
     saveHoroscope({ user_id: user.id, date: dateKey, content: horoscopeText });
     await editMarkdownSafe(ctx, loadingMsg.message_id, horoscopeText, { reply_markup: keyboard });
   } catch (error) {
-    logger.error('Failed to generate daily horoscope', { error, userId: ctx.from?.id });
+    logger.error('Failed to generate daily horoscope', { error, userId: telegramId });
     await ctx.api.editMessageText(
       ctx.chat!.id,
       loadingMsg.message_id,
       tUser(user, 'today.error')
     ).catch(() => {});
   } finally {
-    activeHoroscopeJobs.delete(user.id);
+    endForecastJob(telegramId);
   }
 }
 
@@ -100,7 +98,8 @@ export function registerTodayHandler(bot: Bot): void {
 
   bot.callbackQuery('weekly_horoscope', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
-    const user = getUserByTelegramId(ctx.from.id);
+    const telegramId = ctx.from.id;
+    const user = getUserByTelegramId(telegramId);
     if (!user) return;
 
     if (!isSubscriptionActive(user)) {
@@ -111,6 +110,11 @@ export function registerTodayHandler(bot: Bot): void {
           reply_markup: premiumGateKeyboard(user),
         }
       );
+      return;
+    }
+
+    if (!tryBeginForecastJob(telegramId)) {
+      logger.info('Weekly horoscope already in progress', { telegramId });
       return;
     }
 
@@ -125,6 +129,8 @@ export function registerTodayHandler(bot: Bot): void {
     } catch (error) {
       logger.error('Failed to generate weekly horoscope', { error });
       await ctx.api.editMessageText(ctx.chat!.id, loadingMsg.message_id, tUser(user, 'today.weekly_error')).catch(() => {});
+    } finally {
+      endForecastJob(telegramId);
     }
   });
 

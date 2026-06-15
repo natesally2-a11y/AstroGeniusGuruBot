@@ -51,7 +51,8 @@ export async function editMarkdownSafe(
     try {
       await ctx.api.editMessageText(ctx.chat!.id, messageId, stripMarkdown(first), options);
     } catch (editErr) {
-      logger.warn('Plain edit failed, sending new message', { editErr });
+      logger.warn('Plain edit failed, replacing loading message', { editErr });
+      await ctx.api.deleteMessage(ctx.chat!.id, messageId).catch(() => {});
       await replyMarkdownSafe(ctx, text, options);
       return;
     }
