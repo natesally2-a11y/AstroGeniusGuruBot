@@ -3,7 +3,7 @@ import { getUserByTelegramId, saveHoroscope, getHoroscope } from '../../database
 import { generateDailyHoroscope, generateWeeklyHoroscope } from '../../astrology/horoscope';
 import { isSubscriptionActive } from '../../payments/stars';
 import { getHoroscopeCacheKey, parseLangFromHoroscopeKey } from '../../astrology/timezone';
-import { deliverHoroscopeMessage } from '../helpers/reply';
+import { deliverHoroscopeMessage, editMarkdownSafe } from '../helpers/reply';
 import { checkAiQuota, trackAiGeneration } from '../../payments/usageLimits';
 import {
   birthDatePromptKeyboard, horoscopeFollowUpKeyboardForLang,
@@ -66,6 +66,11 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
       return;
     }
 
+    const loadingMsg = await ctx.reply(
+      `${tUser(user, 'today.loading')}\n\n${tUser(user, 'today.loading_sub')}`,
+      { parse_mode: 'Markdown' }
+    );
+
     const horoscopeText = await generateDailyHoroscope(user, true);
     if (horoscopeText.length < 80) {
       throw new Error('Horoscope too short');
@@ -73,7 +78,7 @@ export async function sendTodayHoroscope(ctx: Context): Promise<void> {
 
     trackAiGeneration(user, 'daily');
     saveHoroscope({ user_id: user.id, date: dateKey, content: horoscopeText });
-    await deliverHoroscopeMessage(ctx, horoscopeText, { reply_markup: keyboard });
+    await editMarkdownSafe(ctx, loadingMsg.message_id, horoscopeText, { reply_markup: keyboard });
   } catch (error) {
     logger.error('Failed to generate daily horoscope', { error, userId: ctx.from?.id, build: BUILD_TAG });
     await ctx.reply(tUser(user, 'today.error'));
