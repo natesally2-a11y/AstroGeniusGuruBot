@@ -66,7 +66,7 @@ router.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    build: 'weekly-monthly-full-web',
+    build: 'weekly-monthly-full-web-v2',
   });
 });
 
