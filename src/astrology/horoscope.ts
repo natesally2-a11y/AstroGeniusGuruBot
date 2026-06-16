@@ -17,9 +17,12 @@ import { getMoonPhase } from './features';
 import { DateTime } from 'luxon';
 import { prepareHoroscopeText } from '../bot/helpers/telegramText';
 
-/** Shared AI limits — same for free and premium; premium only removes request quota. */
+/** Shared AI limits — daily stays compact; weekly/monthly need more in Mini App. */
 const AI_TIMEOUT_MS = 45_000;
 const AI_TOKENS = 520;
+export const AI_TOKENS_WEEKLY = 1400;
+export const AI_TOKENS_MONTHLY = 1600;
+export const AI_TIMEOUT_LONG_MS = 90_000;
 
 function getUserSunSign(user: User): ZodiacSign {
   const { year, month, day } = parseBirthDate(user.birth_date!);
@@ -183,7 +186,12 @@ export async function generateTransitForecast(user: User): Promise<string> {
 
 // ─── Weekly horoscope ─────────────────────────────────────────────────────────
 
-export async function generateWeeklyHoroscope(user: User, useAi = true): Promise<string> {
+export async function generateWeeklyHoroscope(
+  user: User,
+  useAi = true,
+  maxTokens = AI_TOKENS,
+  timeoutMs = AI_TIMEOUT_MS
+): Promise<string> {
   const lang = getUserLang(user);
   if (!user.birth_date) {
     return t(lang, 'settings.birth_required');
@@ -228,11 +236,15 @@ ${t(lang, 'horoscope.weekly_footer', {
   return prepareHoroscopeText(await generateAstrologyText(
     t(lang, 'ai.horoscope_weekly'),
     `Sun: ${sunSign}\nWeek: ${formatDate(weekStart)} – ${formatDate(weekEnd)}`,
-    fallback, AI_TOKENS, AI_TIMEOUT_MS, lang
+    fallback, maxTokens, timeoutMs, lang
   ));
 }
 
-export async function generateMonthlyHoroscope(user: User): Promise<string> {
+export async function generateMonthlyHoroscope(
+  user: User,
+  maxTokens = AI_TOKENS,
+  timeoutMs = AI_TIMEOUT_MS
+): Promise<string> {
   const lang = getUserLang(user);
   if (!user.birth_date) {
     return t(lang, 'settings.birth_required');
@@ -247,6 +259,6 @@ export async function generateMonthlyHoroscope(user: User): Promise<string> {
   return prepareHoroscopeText(await generateAstrologyText(
     t(lang, 'ai.horoscope_monthly'),
     `Month: ${monthName}\nSun sign: ${sunSign}`,
-    fallback, AI_TOKENS, AI_TIMEOUT_MS, lang
+    fallback, maxTokens, timeoutMs, lang
   ));
 }

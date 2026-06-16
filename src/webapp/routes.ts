@@ -12,6 +12,7 @@ import {
 import { calculateCompatibility } from '../astrology/compatibility';
 import {
   generateDailyHoroscope, generateWeeklyHoroscope, generateMonthlyHoroscope,
+  AI_TOKENS_WEEKLY, AI_TOKENS_MONTHLY, AI_TIMEOUT_LONG_MS,
 } from '../astrology/horoscope';
 import { generateTransitForecastResult } from '../astrology/transits';
 import {
@@ -65,7 +66,7 @@ router.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    build: 'c8eb7e7-loading',
+    build: 'weekly-monthly-full-web',
   });
 });
 
@@ -145,7 +146,9 @@ router.get('/horoscope/weekly', requireAuth, async (req: Request, res: Response)
   if (!userHasBirthData(user)) { birthDataError(res, user); return; }
   if (!isSubscriptionActive(user)) { res.status(403).json({ error: t(getUserLang(user), 'webapp.premium_required') }); return; }
 
-  res.json({ content: await generateWeeklyHoroscope(user) });
+  res.json({
+    content: await generateWeeklyHoroscope(user, true, AI_TOKENS_WEEKLY, AI_TIMEOUT_LONG_MS),
+  });
 });
 
 router.get('/horoscope/monthly', requireAuth, async (req: Request, res: Response) => {
@@ -153,7 +156,9 @@ router.get('/horoscope/monthly', requireAuth, async (req: Request, res: Response
   if (!userHasBirthData(user)) { birthDataError(res, user); return; }
   if (!isSubscriptionActive(user)) { res.status(403).json({ error: t(getUserLang(user), 'webapp.premium_required') }); return; }
 
-  res.json({ content: await generateMonthlyHoroscope(user) });
+  res.json({
+    content: await generateMonthlyHoroscope(user, AI_TOKENS_MONTHLY, AI_TIMEOUT_LONG_MS),
+  });
 });
 
 router.get('/moon', requireAuth, (req: Request, res: Response) => {
