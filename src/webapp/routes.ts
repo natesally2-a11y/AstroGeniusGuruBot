@@ -65,7 +65,7 @@ router.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    build: 'horoscope-v3-direct',
+    build: 'c8eb7e7-loading',
   });
 });
 
